@@ -66,7 +66,7 @@ def build_dict(file_name,
         f_out.write('\n')
         f_out.write('<pad>\t0\n')
         f_out.write('<start>\t0\n')
-        f_out.write('<end>\t0\n')
+        f_out.write('<eos>\t0\n')
 
         for word, freq in sorted_dict[:(vocab_size-4)]:
             f_out.write(word)
@@ -88,4 +88,9 @@ def load_dict(dict_name,
 
     return word_to_idx, idx_to_word
 
-build_dict("./../data/train_data.json", './../dict/')
+def load_corpus(corpus_name,
+                encoding='utf8'):
+
+    file_in = json.load(open(corpus_name), encoding)
+
+    print file_in
