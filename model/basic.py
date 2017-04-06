@@ -1,124 +1,200 @@
 # -*- coding:utf8 -*-
-'''
-实现最最基本的ENCODER-DECODER结构
-实现模型的存取功能
-使用SAMPLE和BEAM-SEARCH获得比较好的结果
-'''
-
 import tensorflow as tf
+from tensorflow.contrib.rnn import LSTMCell, AttentionCellWrapper, GRUCell, LSTMStateTuple, BasicLSTMCell
 from util.dictutil import load_dict
-from tensorflow.contrib.rnn import LSTMCell, LSTMStateTuple, static_rnn
-from tensorflow.contrib.legacy_seq2seq import sequence_loss_by_example
-import numpy as np
+from util.datautil import batch_generator, load_corpus, batch_op
+from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
 
-# ----- 控制GPU资源 -----
-config_tf = tf.ConfigProto()
-config_tf.gpu_options.allow_growth = True
-config_tf.inter_op_parallelism_threads = 1
-config_tf.intra_op_parallelism_threads = 1
-
-# ----- 配置路径和参数 -----
-dict_name = "./../dict/dict_30000.dict"
+model_path = "./stc_model"
 
 
-word_to_idx, idx_to_word = load_dict(dict_name)
+dict_name = "./../dict/dict_500.dict"
+vocab_to_idx, idx_to_vocab = load_dict(dict_name)
 
-class Config(object):
-    def __init__(self, vocab_size):
-        self.learning_rate = 0.001
-        self.batch_size = 32
-        self.num_step = 25
-        self.embedding_size = 128
-        self.vocab_size = vocab_size
-        self.max_grad_norm = 15
+batcher = batch_generator(load_corpus("./../data/tiny_data.json"), batch_size=5, word_to_index=vocab_to_idx)
 
-class Model(object):
+# model
+idx_start = vocab_to_idx[TOKEN_START]
+idx_eos = vocab_to_idx[TOKEN_EOS]
+idx_pad = vocab_to_idx[TOKEN_PAD]
+idx_unk = vocab_to_idx[TOKEN_UNK]
 
-    def __init__(self, is_training, config):
+vocab_size = len(vocab_to_idx)
+embedding_size = 100
 
-        self.batch_size = batch_size = config.batch_size
-        self.num_steps = num_steps = config.num_step
-        self.embedding_size = embedding_size = config.embedding_size
-        self.vocab_size = vocab_size = config.vocab_size
-        self.lr = lr = config.learning_rate
+encoder_hidden_unit = 100
+decoder_hidden_unit = encoder_hidden_unit
 
-        # ----- 输入变量 X, Y -----
-        self._input_data = tf.placeholder(tf.int32, [batch_size, num_steps])
-        self._targets = tf.placeholder(tf.int32, [batch_size, num_steps])
+attn_length = 200
 
-        with tf.device(":/cpu:0"):
-            embedding = tf.Variable(
-                tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0),
-                dtype=tf.float32)
+is_sample = False
 
-        self.inputs = tf.nn.embedding_lookup(embedding, self._input_data)
+#saver = tf.train.Saver()
 
-        with tf.variable_scope("encoder"):
+if True:
 
-            self.encoder_cell = LSTMCell(embedding_size)
+    sess = tf.Session()
 
-            ((encoder_fw_outputs,
-              encoder_bw_outputs),
-             (encoder_fw_final_state,
-              encoder_bw_final_state)) = tf.nn.bidirectional_dynamic_rnn(self.encoder_cell,
-                                                                         self.encoder_cell,
-                                                                         self.inputs)
+    encoder_inputs = tf.placeholder(dtype=tf.int32, shape=(None, None), name='encoder_inputs')
+    encoder_inputs_length = tf.placeholder(dtype=tf.int32, shape=(None,), name='encoder_inputs_length')
+    decoder_targets = tf.placeholder(dtype=tf.int32, shape=(None, None), name='decoder_targets')
+    decoder_targets_length = tf.placeholder(dtype=tf.int32, shape=(None,), name='decoder_targets_length')
 
-            encoder_outputs = tf.concat((encoder_fw_outputs, encoder_bw_outputs), 2)
+    with tf.device("/cpu:0"):
+        embeddings = tf.Variable(tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0), dtype=tf.float32)
 
-            encoder_final_state_c = tf.concat(
-                (encoder_fw_final_state.c, encoder_bw_final_state.c), 1)
+    encoder_inputs_embedded = tf.nn.embedding_lookup(embeddings, encoder_inputs)
 
-            encoder_final_state_h = tf.concat(
-                (encoder_fw_final_state.h, encoder_bw_final_state.h), 1)
+    encoder_cell = GRUCell(num_units=encoder_hidden_unit)
 
-            encoder_final_state = LSTMStateTuple(
-                c=encoder_final_state_c,
-                h=encoder_final_state_h
-            )
+    encoder_cell = AttentionCellWrapper(cell=encoder_cell, attn_length=attn_length, state_is_tuple=True)
 
-        with tf.variable_scope("decoder"):
+    with tf.variable_scope("encoder"):
+        encoder_outputs, encoder_final_state = tf.nn.dynamic_rnn(cell=encoder_cell,
+                                                                 inputs=encoder_inputs_embedded,
+                                                                 dtype=tf.float32,
+                                                                 time_major=True)
 
-            self.decoder_cell = LSTMCell(embedding_size*2)
-            self.decoder_W = tf.Variable(
-                tf.random_uniform([embedding_size*2, vocab_size], -1.0, 1.0),
-                dtype=tf.float32)
-            self.decoder_b = tf.Variable(tf.zeros([vocab_size], dtype=tf.float32))
+    decoder_cell = GRUCell(num_units=decoder_hidden_unit)
+    decoder_cell = AttentionCellWrapper(cell=decoder_cell, attn_length=attn_length, state_is_tuple=True)
 
-        with tf.variable_scope("RNN"):
+    decoder_length, batch_size = tf.unstack(tf.shape(decoder_targets))
+    decoder_length = decoder_length
 
-            #decoder_input = tf.nn.embedding_lookup(embedding, word_to_idx['<start>'])
-            outputs = []
+    W = tf.Variable(tf.random_uniform([decoder_hidden_unit, vocab_size], -1.0, 1.0), dtype=tf.float32)
+    b = tf.Variable(tf.zeros([vocab_size]), dtype=tf.float32)
 
-            for time_step in range(num_steps):
-                if time_step > 0: tf.get_variable_scope().reuse_variables()
-                decoder_out, decoder_state = static_rnn(self.decoder_cell,
-                                                        self.inputs[:,time_step,:],
-                                                        encoder_final_state)
-                decoder_output = tf.add(tf.matmul(decoder_out, self.decoder_W), self.decoder_b)
-                outputs.append(decoder_output)
+    start_time_slice = tf.ones(shape=[batch_size], dtype=tf.int32, name='START') * idx_start
+    start_embedded = tf.nn.embedding_lookup(embeddings, start_time_slice)
 
-        output = tf.reshape(tf.concat(1, outputs), [-1, embedding_size])
+    pad_time_slice = tf.ones(shape=[batch_size], dtype=tf.int32, name='PAD') * idx_pad
+    pad_embedded = tf.nn.embedding_lookup(embeddings, pad_time_slice)
 
-        logits = tf.matmul(output, self.decoder_W) + self.decoder_b
+    eos_time_slice = tf.ones(shape=[batch_size], dtype=tf.int32, name='EOS') * idx_eos
+    eos_embedded = tf.nn.embedding_lookup(embeddings, eos_time_slice)
 
-        loss = sequence_loss_by_example([logits],
-                                        [tf.reshape(self._targets, [-1])],
-                                        [tf.ones([batch_size * num_steps])])
+    def loop_fn_initial():
+        initial_elements_finished = (0 >= decoder_length)
+        initial_input = start_embedded
+        initial_cell_state = encoder_final_state
+        initial_cell_output = None
+        initial_loop_state = None
+        return (initial_elements_finished,
+                initial_input,
+                initial_cell_state,
+                initial_cell_output,
+                initial_loop_state)
 
-        self._cost = cost = tf.reduce_sum(loss) / batch_size
-        self._final_state = decoder_state
-        self._logits = logits
+    def loop_fn_transition(time, previous_output, previous_state, previous_loop_state):
 
-        if not is_training:
-            self._prob = tf.nn.softmax(logits)
-            return
+        def get_next_input():
+            output_logits = tf.add(tf.matmul(previous_output, W), b)
+            prediction = tf.argmax(output_logits, axis=1)
+            next_input = tf.nn.embedding_lookup(embeddings, prediction)
+            return next_input
 
-        tvars = tf.trainable_variables()
-        grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),
-                                          config.max_grad_norm)
+        elements_finished = (time >= decoder_length)
+        finished = tf.reduce_all(elements_finished)
+        input = tf.cond(finished, lambda: pad_embedded, get_next_input)
+        state = previous_state
+        output = previous_output
+        loop_state = None
 
-        optimizer = tf.train.AdamOptimizer(self.lr)
-        self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+        return (elements_finished, input, state, output, loop_state)
+
+    def loop_fn(time, previous_output, previous_state, previous_loop_state):
+        if previous_state is None:
+            assert previous_output is None
+            return loop_fn_initial()
+        else:
+            return loop_fn_transition(time, previous_output, previous_state, previous_loop_state)
+
+    with tf.variable_scope("decoder"):
+        decoder_outputs_ta, decoder_final_state, _ = tf.nn.raw_rnn(decoder_cell, loop_fn)
+
+    decoder_outputs = decoder_outputs_ta.stack()
+    decoder_max_steps, decoder_batch_size, decoder_dim = tf.unstack(tf.shape(decoder_outputs))
+
+    decoder_outputs_flat = tf.reshape(decoder_outputs, (-1, decoder_dim))
+    decoder_logits_flat = tf.add(tf.matmul(decoder_outputs_flat, W), b)
+    decoder_logits = tf.reshape(decoder_logits_flat, (decoder_max_steps, decoder_batch_size, vocab_size))
+
+    decoder_prediction = tf.argmax(decoder_logits, 2)
+
+    stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+        labels=tf.one_hot(decoder_targets, depth=vocab_size, dtype=tf.float32),
+        logits=decoder_logits,
+    )
+
+    loss = tf.reduce_mean(stepwise_cross_entropy)
+    train_op = tf.train.AdamOptimizer().minimize(loss)
+
+    sess.run(tf.global_variables_initializer())
+    saver = tf.train.Saver()
+
+    loss_track = []
+
+    max_batches = 1000
+    batches_in_epoch = 20
+
+    def next_feed():
+        [r_q, r_a, r_qe, r_ae, r_ql, r_al] = batcher.next()
+        encoder_inputs_, encoder_inputs_length_ = batch_op(r_q, idx_pad)
+        decoder_targets_, _ = batch_op(r_a, idx_pad)
+
+        return {
+            encoder_inputs: encoder_inputs_,
+            encoder_inputs_length: encoder_inputs_length_,
+            decoder_targets: decoder_targets_
+        }
 
 
+    for batch in range(max_batches):
+        fd = next_feed()
+        _, l = sess.run([train_op, loss], fd)
+        loss_track.append(l)
+
+        if batch == 0 or batch % batches_in_epoch == 0:
+            print('batch {}'.format(batch))
+            print('  minibatch loss: {}').format(sess.run(loss, fd))
+            predict_ = sess.run(decoder_prediction, fd)
+            for i, (target, pred) in enumerate(zip(fd[decoder_targets].T, predict_.T)):
+                print('  sample {}:'.format(i+1))
+                str_tar = ""
+                for j in target: str_tar += idx_to_vocab[j]
+                #print('    target     > {}'.format([idx_to_vocab[j] for j in target]))
+                print('    target     > ')
+                print(str_tar)
+
+                str_pred = ""
+                for j in pred: str_pred += idx_to_vocab[j]
+                #print('    predicted > {}'.format([idx_to_vocab[j] for j in pred]))
+                print('    predicted     > ')
+                print(str_pred)
+                if i >= 2:
+                    break
+                print ""
+            saver.save(sess, './../save/basic/my-model', global_step=batch)
+
+
+    #new_saver = tf.train.import_meta_graph('my-model-80.meta')
+    #new_saver.restore(sess, tf.train.latest_checkpoint('./'))
+
+
+    while True:
+        print ""
+        user_inp = raw_input("  say > ")
+        user_words = [user_inp.strip().split(" ")]
+        user_words_idx = [[ vocab_to_idx.get(w, idx_unk)for w in words]for words in user_words]
+        user_inp_batch, user_inp_batch_len = batch_op(user_words_idx, idx_pad)
+        any_target = [[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad]]
+
+        predict_ = sess.run(decoder_prediction, feed_dict={encoder_inputs: user_inp_batch,
+                                                           encoder_inputs_length: user_inp_batch_len,
+                                                           decoder_targets: any_target})
+        for i, pred in enumerate(predict_.T):
+            str = ""
+            for j in pred:
+                if j != idx_pad:
+                    str += idx_to_vocab[j] + " "
+            print('robot > {}'.format(str))

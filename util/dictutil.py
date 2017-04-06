@@ -23,35 +23,8 @@ def build_dict(file_name,
         for word in a_words:
             dictionary[word] = dictionary.get(word, 0) + 1
 
-    # 将词典中词语进行输出
-    '''
-    with codecs.open(dict_path, 'w', encoding) as f_out:
-        for k in dictionary.keys():
-            f_out.write(k)
-            f_out.write('\t')
-            f_out.write(str(dictionary[k]))
-            f_out.write('\n')
-    '''
-
     # 对词典中词语根据出现频率排序
     sorted_dict = sorted(dictionary.items(), lambda x,y: cmp(x[1], y[1]), reverse=True)
-
-    # 将排序后的词典进行输出
-    '''
-    with codecs.open(dict_path, 'w', encoding) as f_out:
-        f_out.write('<unk>\t')
-        f_out.write(str(unk_count))
-        f_out.write('\n')
-        f_out.write('<pad>\t0\n')
-        f_out.write('<start>\t0\n')
-        f_out.write('<end>\t0\n')
-
-        for word, freq in sorted_dict:
-            f_out.write(word)
-            f_out.write('\t')
-            f_out.write(str(freq))
-            f_out.write('\n')
-    '''
 
     # 根据出现频率设置阈值,低于阈值的采用<unk>代替
     unk_count = 0
@@ -88,3 +61,4 @@ def load_dict(dict_name,
 
     return word_to_idx, idx_to_word
 
+build_dict("./../data/tiny_data.json", "./../dict/", 500)
