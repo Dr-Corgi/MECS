@@ -1,7 +1,7 @@
 # -*- coding:utf8 -*-
 import json
 from numpy.random import shuffle
-from conf.profile import TOKEN_UNK
+from conf.profile import TOKEN_UNK, TOKEN_EOS
 import numpy as np
 
 
@@ -18,12 +18,12 @@ def batch_generator(corpus, batch_size, word_to_index):
             shuffle(corpus)
             current_index = 0
 
-        r_q = []
-        r_a = []
-        r_qe = []
-        r_ae = []
-        r_ql = []
-        r_al = []
+        r_q = list()
+        r_a = list()
+        r_qe = list()
+        r_ae = list()
+        r_ql = list()
+        r_al = list()
 
         for [q,qe],[a,ae] in corpus[current_index: current_index+batch_size]:
             r_q.append(seq_index(word_to_index, q.strip().split(" ")))
@@ -39,8 +39,8 @@ def batch_generator(corpus, batch_size, word_to_index):
 
 
 # 根据文本序列和词典生成index序列
-def seq_index(word_to_index, seq):
-    return [word_to_index.get(s, word_to_index[TOKEN_UNK]) for s in seq]
+def seq_index(vocab_to_idx, seq):
+    return [vocab_to_idx.get(s, vocab_to_idx[TOKEN_UNK]) for s in seq] + [vocab_to_idx[TOKEN_EOS]]
 
 
 # 将输入转化为 [ max_seq_len, batch_size ]矩阵,并使用<pad>对句子进行填充.
