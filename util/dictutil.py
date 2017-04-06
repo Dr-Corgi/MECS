@@ -88,9 +88,3 @@ def load_dict(dict_name,
 
     return word_to_idx, idx_to_word
 
-def load_corpus(corpus_name,
-                encoding='utf8'):
-
-    file_in = json.load(open(corpus_name), encoding)
-
-    print file_in
