@@ -93,7 +93,7 @@ class Model(object):
         self.loss = tf.reduce_mean(stepwise_cross_entropy)
         self.train_op = tf.train.AdamOptimizer().minimize(self.loss)
 
-    def init(self, sess):
+    def variables_init(self, sess):
         sess.run(tf.global_variables_initializer())
 
     def train(self, sess):
@@ -107,7 +107,7 @@ class Model(object):
                 print('batch {}'.format(batch))
                 print('  minibatch loss: {}').format(sess.run(self.loss, fd))
                 predict_ = sess.run(self.decoder_prediction, fd)
-                self.print_result(fd[self.decoder_targets], predict_)
+                self.__print_result(fd[self.decoder_targets], predict_)
 
     def next_feed(self):
         [r_q, r_a, r_qe, r_ae] = batcher.next()
@@ -151,7 +151,7 @@ class Model(object):
 
         print result_str
 
-    def print_result(self, tar, pred):
+    def __print_result(self, tar, pred):
         for i, (target, pred) in enumerate(zip(tar.T, pred.T)):
             print('  sample {}:'.format(i+1))
             str_tar = ""
