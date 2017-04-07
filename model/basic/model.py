@@ -5,6 +5,7 @@ from tensorflow.contrib.layers import linear
 from util.dictutil import load_dict
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
+import numpy as np
 
 '''
 最基本的生成模型.
@@ -16,21 +17,25 @@ from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
 训练过程中采用TARGET中的字符,而不是上一次输出的结果.
 '''
 
+
 # Configuration
 class Config(object):
-
     def __init__(self):
         self.embedding_size = 128
         self.hidden_unit = 128
-        self.save_path = "./../../save/basic/"
+        self.save_path = "./../save/basic/"
         self.model_name = "BasicModel"
-        self.dict_file = "./../../dict/dict_500.dict"
-        self.corpus_file = "./../../data/tiny_data.json"
+        self.dict_file = "./../dict/dict_500.dict"
+        self.corpus_file = "./../data/tiny_data.json"
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
         self.vocab_size = len(self.vocab_to_idx)
-        self.max_batch = 500
+        self.max_batch = 1001
         self.save_step = 200
+        self.batch_size = 5
+        self.max_generate_len = 10
 
+        self.is_beams = True
+        self.beam_size = 3
 
 class Model(object):
 
@@ -42,7 +47,11 @@ class Model(object):
         self.save_path = config.save_path
         self.model_name = config.model_name
         self.save_step = config.save_step
-        self.max_bath = config.max_batch
+        self.max_batch = config.max_batch
+        self.max_generate_len = config.max_generate_len
+
+        self.is_beams = config.is_beams
+        if self.is_beams: self.beam_size = config.beam_size
 
         self.idx_start = config.vocab_to_idx[TOKEN_START]
         self.idx_eos = config.vocab_to_idx[TOKEN_EOS]
@@ -85,6 +94,8 @@ class Model(object):
 
         self.decoder_logits = linear(self.decoder_outputs, vocab_size)
 
+        self.prob = tf.nn.softmax(self.decoder_logits)
+
         self.decoder_prediction = tf.argmax(self.decoder_logits, 2)
 
         stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
@@ -105,11 +116,12 @@ class Model(object):
             _, l = sess.run([self.train_op, self.loss], fd)
             loss_track.append(l)
 
-            if batch != 0 or batch % self.save_step == 0:
+            if batch % self.save_step == 0 and batch != 0:
                 print('batch {}'.format(batch))
                 print('  minibatch loss: {}').format(sess.run(self.loss, fd))
                 predict_ = sess.run(self.decoder_prediction, fd)
                 self.__print_result(fd[self.decoder_targets], predict_)
+                self.save(sess, batch)
 
     def next_feed(self):
         [r_q, r_a, r_qe, r_ae] = batcher.next()
@@ -131,11 +143,10 @@ class Model(object):
     def generate(self, sess, inp):
         inp_index = [seq_index(self.vocab_to_idx, inp)]
         einp, einp_len = batch_op(inp_index, self.idx_pad)
-        predict_,last_state = sess.run([self.decoder_prediction, self.decoder_final_state],
-                            feed_dict = {self.encoder_inputs: einp,
-                                         self.encoder_inputs_length: einp_len,
-                                         self.decoder_inputs:[[self.idx_start]]})
-
+        state_ = sess.run([self.encoder_final_state],
+                          feed_dict = {self.encoder_inputs: einp,
+                                       self.encoder_inputs_length: einp_len})
+        '''
         result_index = []
         result_str = ""
 
@@ -148,10 +159,61 @@ class Model(object):
                                          self.decoder_inputs:[[self.idx_start]]})
             result_index.append(predict_[0,0])
             result_str += self.idx_to_vocab[predict_[0,0]]
-            if len(result_index) > 25:
+            if len(result_index) > self.max_generate_len:
                 break
 
         print result_str
+        '''
+
+        if self.is_beams:
+            beams = [(0.0, "", [])]
+            tdata = self.vocab_to_idx[TOKEN_START]
+            prob_, state_ = sess.run([self.prob, self.decoder_final_state],
+                                     feed_dict={self.decoder_inputs: [[tdata]],
+                                                self.initial_state: state_})
+
+            y = np.log(1e-20 + prob_.reshape(-1))
+            top_indices = np.argsort(-y)
+            b = beams[0]
+            beam_candidates = []
+            for bc in xrange(self.beam_size):
+                vocab_idx = top_indices[bc]
+                beam_candidates.append((b[0]+y[vocab_idx], b[1]+self.idx_to_vocab[vocab_idx], vocab_idx, state_))
+            beam_candidates.sort(key=lambda x:x[0], reverse=True)
+            beams = beam_candidates[:self.beam_size]
+            for _ in range(self.max_generate_len-1):
+                beam_candidates = []
+                for b in beams:
+                    tdata = np.int32(b[2])
+                    prob_, state_ = sess.run([self.prob, self.decoder_final_state],
+                                             feed_dict={self.decoder_inputs: [[tdata]],
+                                                        self.initial_state: b[3]})
+                    y = np.log(1e-20 + prob_.reshape(-1))
+                    top_indices = np.argsort(-y)
+                    for bc in xrange(self.beam_size):
+                        vocab_idx = top_indices[bc]
+                        beam_candidates.append((b[0]+y[vocab_idx], b[1]+self.idx_to_vocab[vocab_idx], vocab_idx, state_))
+                    beam_candidates.sort(key=lambda x:x[0], reverse=True)
+                    beams = beam_candidates[:self.beam_size]
+
+            return beams[0][1]
+
+        else:
+            tdata = self.vocab_to_idx[TOKEN_START]
+            predict_, state_ = sess.run([self.decoder_prediction, self.decoder_final_state],
+                                     feed_dict={self.decoder_inputs: [[tdata]],
+                                                self.initial_state: state_})
+
+            tdata = np.int32(predict_[0,0])
+            response = self.idx_to_vocab[tdata]
+            for _ in range(self.max_generate_len-1):
+                predict_, state_ = sess.run([self.decoder_prediction, self.decoder_final_state],
+                                            feed_dict={self.decoder_inputs: [[tdata]],
+                                                       self.initial_state: state_})
+                tdata = np.int32(predict_[0,0])
+                response += self.idx_to_vocab[tdata]
+
+            return response
 
     def __print_result(self, tar, pred):
         for i, (target, pred) in enumerate(zip(tar.T, pred.T)):
@@ -184,10 +246,12 @@ if __name__ == "__main__":
     model = Model(config)
     sess = tf.Session()
     batcher = batch_generator(load_corpus(config.corpus_file),
-                              batch_size=5,
+                              batch_size=config.batch_size,
                               word_to_index=config.vocab_to_idx)
-    model.init(sess)
-    model.train(sess)
-    model.save(sess, 100)
-    sess = model.restore(sess, 100)
-    model.generate(sess, "你 好")
+    model.variables_init(sess)
+    #model.train(sess)
+    #model.save(sess, 100)
+    #sess = tf.Session()
+    sess = model.restore(sess, 800)
+    response = model.generate(sess, "你 好")
+    print response
