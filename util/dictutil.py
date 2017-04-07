@@ -2,10 +2,8 @@
 import json
 import codecs
 
-def build_dict(file_name,
-               dict_path,
-               vocab_size=30000,
-               encoding='utf8'):
+def build_dict(file_name, dict_path, vocab_size=30000, encoding='utf8'):
+
     dictionary = {}
 
     file_in = json.load(open(file_name), encoding)
@@ -48,8 +46,8 @@ def build_dict(file_name,
             f_out.write('\n')
 
 
-def load_dict(dict_name,
-              encoding='utf8'):
+def load_dict(dict_name, encoding='utf8'):
+
     word_to_idx = {}
     idx_to_word = {}
 
@@ -60,5 +58,3 @@ def load_dict(dict_name,
             idx_to_word[len(idx_to_word)] = word
 
     return word_to_idx, idx_to_word
-
-build_dict("./../data/tiny_data.json", "./../dict/", 500)

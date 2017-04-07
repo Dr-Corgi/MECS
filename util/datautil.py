@@ -18,24 +18,20 @@ def batch_generator(corpus, batch_size, word_to_index):
             shuffle(corpus)
             current_index = 0
 
-        r_q = list()
-        r_a = list()
-        r_qe = list()
-        r_ae = list()
-        r_ql = list()
-        r_al = list()
+        r_q = list()    # 问题文本
+        r_a = list()    # 回复文本
+        r_qe = list()   # 问题情绪标签
+        r_ae = list()   # 回复情绪标签
 
         for [q,qe],[a,ae] in corpus[current_index: current_index+batch_size]:
             r_q.append(seq_index(word_to_index, q.strip().split(" ")))
             r_a.append(seq_index(word_to_index, a.strip().split(" ")))
             r_qe.append(qe)
             r_ae.append(ae)
-            r_ql.append(len(q.strip().split(" ")))
-            r_al.append(len(a.strip().split(" ")))
 
         current_index += batch_size
 
-        yield [r_q, r_a, r_qe, r_ae, r_ql, r_al]
+        yield [r_q, r_a, r_qe, r_ae]
 
 
 # 根据文本序列和词典生成index序列

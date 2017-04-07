@@ -167,7 +167,7 @@ class Model(object):
                 #saver.save(sess, './../save/basic/my-model', global_step=batch)
 
     def next_feed(self):
-        [r_q, r_a, r_qe, r_ae, r_ql, r_al] = batcher.next()
+        [r_q, r_a, r_qe, r_ae] = batcher.next()
         encoder_inputs_, encoder_inputs_length_ = batch_op(r_q, self.idx_pad)
         decoder_targets_, _ = batch_op(r_a, self.idx_pad)
 
