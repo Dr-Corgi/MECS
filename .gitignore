@@ -6,3 +6,4 @@ data/*
 save/basic/*
 *.pyc
 */*.pyc
+backup/*
