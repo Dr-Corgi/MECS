@@ -1,14 +1,19 @@
 # -*- coding:utf8 -*-
 import tensorflow as tf
 from tensorflow.contrib.rnn import LSTMCell, AttentionCellWrapper, LSTMStateTuple, BasicLSTMCell
+from tensorflow.contrib.layers import linear
 from util.dictutil import load_dict
-from util.datautil import batch_generator, load_corpus, batch_op, seq_index
+from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
 
 '''
 最基本的生成模型.
 使用单向LSTM作为ENCODER.
 使用单向LSTM作为DECODER.
+不使用SAMPLE.
+不使用BEAM SEARCH.
+不使用ATTENTION.
+训练过程中采用TARGET中的字符,而不是上一次输出的结果.
 '''
 
 # Configuration
@@ -30,7 +35,6 @@ class Config(object):
 class Model(object):
 
     def __init__(self, config):
-        #sess = tf.Session()
 
         self.vocab_to_idx = config.vocab_to_idx
         self.idx_to_vocab = config.idx_to_vocab
@@ -46,8 +50,8 @@ class Model(object):
 
         self.encoder_inputs = tf.placeholder(dtype=tf.int32, shape=(None, None), name='encoder_inputs')
         self.encoder_inputs_length = tf.placeholder(dtype=tf.int32, shape=(None,), name='encoder_inputs_length')
+        self.decoder_inputs = tf.placeholder(dtype=tf.int32, shape=(None, None), name='decoder_inputs')
         self.decoder_targets = tf.placeholder(dtype=tf.int32, shape=(None, None), name='decoder_targets')
-        #self.decoder_targets_length = tf.placeholder(dtype=tf.int32, shape=(None,), name='decoder_targets_length')
 
         with tf.device("/cpu:0"):
             self.embeddings = tf.Variable(tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0), dtype=tf.float32)
@@ -63,70 +67,24 @@ class Model(object):
                                                            dtype=tf.float32,
                                                            time_major=True)
 
-
         decoder_cell = LSTMCell(num_units=hidden_unit)
-        decoder_length, batch_size = tf.unstack(tf.shape(self.decoder_targets))
-
-        W = tf.Variable(tf.random_uniform([hidden_unit, vocab_size], -1.0, 1.0), dtype=tf.float32)
-        b = tf.Variable(tf.zeros([vocab_size]), dtype=tf.float32)
-
-        start_time_slice = tf.ones(shape=[batch_size], dtype=tf.int32, name='START') * self.idx_start
-        start_embedded = tf.nn.embedding_lookup(self.embeddings, start_time_slice)
-
-        pad_time_slice = tf.ones(shape=[batch_size], dtype=tf.int32, name='PAD') * self.idx_pad
-        pad_embedded = tf.nn.embedding_lookup(self.embeddings, pad_time_slice)
-
-        def loop_fn_initial():
-            initial_elements_finished = (0 >= decoder_length)
-            initial_input = start_embedded
-            initial_cell_state = self.encoder_final_state
-            initial_cell_output = None
-            initial_loop_state = None
-            return (initial_elements_finished,
-                    initial_input,
-                    initial_cell_state,
-                    initial_cell_output,
-                    initial_loop_state)
-
-        def loop_fn_transition(time, previous_output, previous_state, previous_loop_state):
-
-            def get_next_input():
-                output_logits = tf.add(tf.matmul(previous_output, W), b)
-                prediction = tf.argmax(output_logits, axis=1)
-                next_input = tf.nn.embedding_lookup(self.embeddings, prediction)
-                return next_input
-
-            elements_finished = (time >= decoder_length)
-            finished = tf.reduce_all(elements_finished)
-            input = tf.cond(finished, lambda: pad_embedded, get_next_input)
-            state = previous_state
-            output = previous_output
-            loop_state = None
-
-            return (elements_finished, input, state, output, loop_state)
-
-        def loop_fn(time, previous_output, previous_state, previous_loop_state):
-            if previous_state is None:
-                assert previous_output is None
-                return loop_fn_initial()
-            else:
-                return loop_fn_transition(time, previous_output, previous_state, previous_loop_state)
-
+        self.initial_state = self.encoder_final_state
+        decoder_inputs_embedded = tf.nn.embedding_lookup(self.embeddings, self.decoder_inputs)
         with tf.variable_scope("decoder"):
-            decoder_outputs_ta, decoder_final_state, _ = tf.nn.raw_rnn(decoder_cell, loop_fn)
+            (self.decoder_outputs,
+             self.decoder_final_state) = tf.nn.dynamic_rnn(decoder_cell,
+                                                           decoder_inputs_embedded,
+                                                           initial_state=self.initial_state,
+                                                           dtype=tf.float32,
+                                                           time_major=True)
 
-        decoder_outputs = decoder_outputs_ta.stack()
-        decoder_max_steps, decoder_batch_size, decoder_dim = tf.unstack(tf.shape(decoder_outputs))
+        self.decoder_logits = linear(self.decoder_outputs, vocab_size)
 
-        decoder_outputs_flat = tf.reshape(decoder_outputs, (-1, decoder_dim))
-        decoder_logits_flat = tf.add(tf.matmul(decoder_outputs_flat, W), b)
-        decoder_logits = tf.reshape(decoder_logits_flat, (decoder_max_steps, decoder_batch_size, vocab_size))
-
-        self.decoder_prediction = tf.argmax(decoder_logits, 2)
+        self.decoder_prediction = tf.argmax(self.decoder_logits, 2)
 
         stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
             labels=tf.one_hot(self.decoder_targets, depth=vocab_size, dtype=tf.float32),
-            logits=decoder_logits,
+            logits=self.decoder_logits,
         )
 
         self.loss = tf.reduce_mean(stepwise_cross_entropy)
@@ -170,24 +128,43 @@ class Model(object):
         [r_q, r_a, r_qe, r_ae] = batcher.next()
         encoder_inputs_, encoder_inputs_length_ = batch_op(r_q, self.idx_pad)
         decoder_targets_, _ = batch_op(r_a, self.idx_pad)
+        decoder_inputs_, _ = dinput_op(r_a, self.idx_pad, self.idx_start)
 
         return {
             self.encoder_inputs: encoder_inputs_,
             self.encoder_inputs_length: encoder_inputs_length_,
+            self.decoder_inputs:decoder_inputs_,
             self.decoder_targets: decoder_targets_
         }
 
-    def predict(self, sess, inp):
+    # 生成回复的方法.
+    # 思路:   1.首先将Question传入Encoder,得到隐藏状态c;
+    #        2.传入<start>生成第一个单词,并得到decoder的新隐藏状态c;
+    #        3.传入刚才生成的单词,继续预测下一个单词.
+    def generate(self, sess, inp):
         inp_index = [seq_index(self.vocab_to_idx, inp)]
         einp, einp_len = batch_op(inp_index, self.idx_pad)
-        predict_ = sess.run(self.decoder_prediction,
+        predict_,last_state = sess.run([self.decoder_prediction, self.decoder_final_state],
                             feed_dict = {self.encoder_inputs: einp,
                                          self.encoder_inputs_length: einp_len,
-                                         self.decoder_targets:[[self.idx_unk]]})
+                                         self.decoder_inputs:[[self.idx_start]]})
 
-        for p in predict_.T:
-            for j in p:
-                print self.idx_to_vocab[j]
+        result_index = []
+        result_str = ""
+
+        result_index.append(predict_[0,0])
+        result_str += self.idx_to_vocab[predict_[0,0]]
+
+        while result_index[-1] != self.idx_eos:
+            predict_,last_state = sess.run([self.decoder_prediction, self.decoder_final_state],
+                            feed_dict = {self.initial_state: last_state,
+                                         self.decoder_inputs:[[self.idx_start]]})
+            result_index.append(predict_[0,0])
+            result_str += self.idx_to_vocab[predict_[0,0]]
+            if len(result_index) > 25:
+                break
+
+        print result_str
 
     '''
     while True:
@@ -220,4 +197,4 @@ if __name__ == "__main__":
                               batch_size=5,
                               word_to_index=config.vocab_to_idx)
     model.train(sess)
-    model.predict(sess, "你 好")
+    model.generate(sess, "你 好")
