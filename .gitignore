@@ -7,3 +7,4 @@ save/basic/*
 *.pyc
 */*.pyc
 backup/*
+*/*/__init__.py

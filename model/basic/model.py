@@ -22,10 +22,10 @@ class Config(object):
     def __init__(self):
         self.embedding_size = 128
         self.hidden_unit = 128
-        self.save_path = "./../save/basic/"
+        self.save_path = "./../../save/basic/"
         self.model_name = "BasicModel"
-        self.dict_file = "./../dict/dict_500.dict"
-        self.corpus_file = "./../data/tiny_data.json"
+        self.dict_file = "./../../dict/dict_500.dict"
+        self.corpus_file = "./../../data/tiny_data.json"
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
         self.vocab_size = len(self.vocab_to_idx)
         self.max_batch = 500
@@ -38,6 +38,9 @@ class Model(object):
 
         self.vocab_to_idx = config.vocab_to_idx
         self.idx_to_vocab = config.idx_to_vocab
+
+        self.save_path = config.save_path
+        self.model_name = config.model_name
 
         self.idx_start = config.vocab_to_idx[TOKEN_START]
         self.idx_eos = config.vocab_to_idx[TOKEN_EOS]
@@ -90,13 +93,11 @@ class Model(object):
         self.loss = tf.reduce_mean(stepwise_cross_entropy)
         self.train_op = tf.train.AdamOptimizer().minimize(self.loss)
 
-    def train(self, sess):
-
+    def init(self, sess):
         sess.run(tf.global_variables_initializer())
-        #saver = tf.train.Saver()
 
+    def train(self, sess):
         loss_track = []
-
         for batch in range(config.max_batch):
             fd = self.next_feed()
             _, l = sess.run([self.train_op, self.loss], fd)
@@ -106,23 +107,7 @@ class Model(object):
                 print('batch {}'.format(batch))
                 print('  minibatch loss: {}').format(sess.run(self.loss, fd))
                 predict_ = sess.run(self.decoder_prediction, fd)
-                for i, (target, pred) in enumerate(zip(fd[self.decoder_targets].T, predict_.T)):
-                    print('  sample {}:'.format(i+1))
-                    str_tar = ""
-                    for j in target: str_tar += config.idx_to_vocab[j]
-                    #print('    target     > {}'.format([idx_to_vocab[j] for j in target]))
-                    print('    target     > ')
-                    print(str_tar)
-
-                    str_pred = ""
-                    for j in pred: str_pred += config.idx_to_vocab[j]
-                    #print('    predicted > {}'.format([idx_to_vocab[j] for j in pred]))
-                    print('    predicted     > ')
-                    print(str_pred)
-                    if i >= 2:
-                        break
-                    print ""
-                #saver.save(sess, './../save/basic/my-model', global_step=batch)
+                self.print_result(fd[self.decoder_targets], predict_)
 
     def next_feed(self):
         [r_q, r_a, r_qe, r_ae] = batcher.next()
@@ -166,26 +151,29 @@ class Model(object):
 
         print result_str
 
-    '''
-    while True:
-        print ""
-        user_inp = raw_input("  say > ")
-        user_words = [user_inp.strip().split(" ")]
-        user_words_idx = [[ vocab_to_idx.get(w, idx_unk)for w in words]for words in user_words]
-        user_inp_batch, user_inp_batch_len = batch_op(user_words_idx, idx_pad)
-        any_target = [[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad],[idx_pad]]
+    def print_result(self, tar, pred):
+        for i, (target, pred) in enumerate(zip(tar.T, pred.T)):
+            print('  sample {}:'.format(i+1))
+            str_tar = ""
+            for j in target: str_tar += config.idx_to_vocab[j]
+            print('    target     > ')
+            print(str_tar)
+            str_pred = ""
+            for j in pred: str_pred += config.idx_to_vocab[j]
+            print('    predicted     > ')
+            print(str_pred)
+            if i >= 2:
+                break
+            print ""
 
-        predict_ = sess.run(decoder_prediction, feed_dict={encoder_inputs: user_inp_batch,
-                                                           encoder_inputs_length: user_inp_batch_len,
-                                                           decoder_targets: any_target})
-        for i, pred in enumerate(predict_.T):
-            str = ""
-            for j in pred:
-                if j != idx_pad:
-                    str += idx_to_vocab[j] + " "
-            print('robot > {}'.format(str))
+    def save(self, sess, step):
+        saver = tf.train.Saver()
+        saver.save(sess, self.save_path + self.model_name, global_step=step)
 
-    '''
+    def restore(self, sess, step):
+        saver = tf.train.Saver()
+        saver.restore(sess, self.save_path+self.model_name+'-'+str(step))
+        return sess
 
 
 if __name__ == "__main__":
@@ -196,5 +184,8 @@ if __name__ == "__main__":
     batcher = batch_generator(load_corpus(config.corpus_file),
                               batch_size=5,
                               word_to_index=config.vocab_to_idx)
-    model.train(sess)
+    model.init(sess)
+    #model.train(sess)
+    #model.save(sess, 1000)
+    sess = model.restore(sess, 1000)
     model.generate(sess, "你 好")
