@@ -29,7 +29,7 @@ class Config(object):
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
         self.vocab_size = len(self.vocab_to_idx)
         self.max_batch = 500
-        self.batches_in_epoch = 100
+        self.save_step = 200
 
 
 class Model(object):
@@ -41,6 +41,8 @@ class Model(object):
 
         self.save_path = config.save_path
         self.model_name = config.model_name
+        self.save_step = config.save_step
+        self.max_bath = config.max_batch
 
         self.idx_start = config.vocab_to_idx[TOKEN_START]
         self.idx_eos = config.vocab_to_idx[TOKEN_EOS]
@@ -98,12 +100,12 @@ class Model(object):
 
     def train(self, sess):
         loss_track = []
-        for batch in range(config.max_batch):
+        for batch in range(self.max_batch):
             fd = self.next_feed()
             _, l = sess.run([self.train_op, self.loss], fd)
             loss_track.append(l)
 
-            if batch == 0 or batch % config.batches_in_epoch == 0:
+            if batch != 0 or batch % self.save_step == 0:
                 print('batch {}'.format(batch))
                 print('  minibatch loss: {}').format(sess.run(self.loss, fd))
                 predict_ = sess.run(self.decoder_prediction, fd)
@@ -155,11 +157,11 @@ class Model(object):
         for i, (target, pred) in enumerate(zip(tar.T, pred.T)):
             print('  sample {}:'.format(i+1))
             str_tar = ""
-            for j in target: str_tar += config.idx_to_vocab[j]
+            for j in target: str_tar += self.idx_to_vocab[j]
             print('    target     > ')
             print(str_tar)
             str_pred = ""
-            for j in pred: str_pred += config.idx_to_vocab[j]
+            for j in pred: str_pred += self.idx_to_vocab[j]
             print('    predicted     > ')
             print(str_pred)
             if i >= 2:
@@ -185,7 +187,7 @@ if __name__ == "__main__":
                               batch_size=5,
                               word_to_index=config.vocab_to_idx)
     model.init(sess)
-    #model.train(sess)
-    #model.save(sess, 1000)
-    sess = model.restore(sess, 1000)
+    model.train(sess)
+    model.save(sess, 100)
+    sess = model.restore(sess, 100)
     model.generate(sess, "你 好")
