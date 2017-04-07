@@ -146,24 +146,6 @@ class Model(object):
         state_ = sess.run([self.encoder_final_state],
                           feed_dict = {self.encoder_inputs: einp,
                                        self.encoder_inputs_length: einp_len})
-        '''
-        result_index = []
-        result_str = ""
-
-        result_index.append(predict_[0,0])
-        result_str += self.idx_to_vocab[predict_[0,0]]
-
-        while result_index[-1] != self.idx_eos:
-            predict_,last_state = sess.run([self.decoder_prediction, self.decoder_final_state],
-                            feed_dict = {self.initial_state: last_state,
-                                         self.decoder_inputs:[[self.idx_start]]})
-            result_index.append(predict_[0,0])
-            result_str += self.idx_to_vocab[predict_[0,0]]
-            if len(result_index) > self.max_generate_len:
-                break
-
-        print result_str
-        '''
 
         if self.is_beams:
             beams = [(0.0, "", [])]
