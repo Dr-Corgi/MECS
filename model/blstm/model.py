@@ -7,6 +7,17 @@ from util.datautil import batch_generator, load_corpus, batch_op, seq_index, din
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
 import numpy as np
 
+'''
+最基本的生成模型.
+使用单向LSTM作为ENCODER.
+使用单向LSTM作为DECODER.
+不使用SAMPLE.
+不使用BEAM SEARCH.
+不使用ATTENTION.
+训练过程中采用TARGET中的字符,而不是上一次输出的结果.
+'''
+
+
 # Configuration
 class Config(object):
     def __init__(self):
