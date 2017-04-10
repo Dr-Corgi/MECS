@@ -37,6 +37,8 @@ class Config(object):
         self.is_beams = True
         self.beam_size = 3
 
+        self.is_sample = True
+
 class Model(object):
 
     def __init__(self, config):
@@ -52,6 +54,7 @@ class Model(object):
 
         self.is_beams = config.is_beams
         if self.is_beams: self.beam_size = config.beam_size
+        self.is_sample = config.is_sample
 
         self.idx_start = config.vocab_to_idx[TOKEN_START]
         self.idx_eos = config.vocab_to_idx[TOKEN_EOS]
@@ -155,7 +158,10 @@ class Model(object):
                                                 self.initial_state: state_})
 
             y = np.log(1e-20 + prob_.reshape(-1))
-            top_indices = np.argsort(-y)
+            if self.is_sample:
+                top_indices = np.random.choice(self.vocab_size, self.beam_size, replace=False, p=prob_.reshape(-1))
+            else:
+                top_indices = np.argsort(-y)
             b = beams[0]
             beam_candidates = []
             for bc in xrange(self.beam_size):
@@ -171,7 +177,10 @@ class Model(object):
                                              feed_dict={self.decoder_inputs: [[tdata]],
                                                         self.initial_state: b[3]})
                     y = np.log(1e-20 + prob_.reshape(-1))
-                    top_indices = np.argsort(-y)
+                    if self.is_sample:
+                        top_indices = np.random.choice(self.vocab_size, self.beam_size, replace=False, p=prob_.reshape(-1))
+                    else:
+                        top_indices = np.argsort(-y)
                     for bc in xrange(self.beam_size):
                         vocab_idx = top_indices[bc]
                         beam_candidates.append((b[0]+y[vocab_idx], b[1]+self.idx_to_vocab[vocab_idx], vocab_idx, state_))
@@ -182,17 +191,28 @@ class Model(object):
 
         else:
             tdata = self.vocab_to_idx[TOKEN_START]
-            predict_, state_ = sess.run([self.decoder_prediction, self.decoder_final_state],
+            prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
                                                 self.initial_state: state_})
 
-            tdata = np.int32(predict_[0,0])
+            if self.is_sample:
+                gen = np.random.choice(self.vocab_size, 1, replace=False, p=prob_.reshape(-1))
+                gen = gen[0]
+            else:
+                gen = np.argmax(prob_.reshape(-1))
+
+            tdata = np.int32(gen)
             response = self.idx_to_vocab[tdata]
             for _ in range(self.max_generate_len-1):
-                predict_, state_ = sess.run([self.decoder_prediction, self.decoder_final_state],
+                prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                             feed_dict={self.decoder_inputs: [[tdata]],
                                                        self.initial_state: state_})
-                tdata = np.int32(predict_[0,0])
+                if self.is_sample:
+                    gen = np.random.choice(self.vocab_size, 1, replace=False, p=prob_.reshape(-1))
+                    gen = gen[0]
+                else:
+                    gen = np.argmax(prob_.reshape(-1))
+                tdata = np.int32(gen)
                 response += self.idx_to_vocab[tdata]
 
             return response
@@ -235,5 +255,5 @@ if __name__ == "__main__":
     #model.save(sess, 100)
     #sess = tf.Session()
     sess = model.restore(sess, 800)
-    response = model.generate(sess, "你 好")
+    response = model.generate(sess, "我 对此 感到 非常 开心")
     print response
