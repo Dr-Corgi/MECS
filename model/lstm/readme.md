@@ -1,8 +1,8 @@
 # Basic Model
 最基本的Encoder-Decoder结构对话生成模型。不考虑语料中的情感（情绪）信息。
 ### Encoder
-采用标准的单层LSTM网络，对于输入文本[x_1, x_2, ..., x_n]，使用LSTM网络对输入文本序列进行读取，得到LSTM隐藏层状态[c_1, c_2, ..., c_n]和LSTM输出[h_1, h_2, ..., h_n]。  
-该模型不使用attention，因此只使用最后一个LSTM隐藏层状态c_n用于Decoder文本生成。LSTM输出被直接抛弃。
+采用标准的单层LSTM网络，对于输入文本[x_1, x_2, ..., x_n]，使用LSTM网络对输入文本序列进行读取，得到LSTM隐藏层状态[c_1, c_2, ..., c_n]和[h_1, h_2, ..., h_n],以及隐藏层输出[y_1, y_2, ..., y_n]。
+该模型不使用attention，因此只使用最后一个LSTM隐藏层状态c_n和h_n用于Decoder文本生成。LSTM输出被直接抛弃。
 
 在实际实现中，采用mini-batch方式每次读入多个文本，因此输入的tensor形状为：[max_length, batch_size]。注意这里采用Time_Major形式的tensor来加快训练速度。因此输入形状例如：
 

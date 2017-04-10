@@ -4,7 +4,7 @@ from tensorflow.contrib.rnn import LSTMCell
 from tensorflow.contrib.layers import linear
 from util.dictutil import load_dict
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
-from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
+from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
 
 # Configuration
@@ -45,7 +45,7 @@ class Model(object):
         if self.is_beams: self.beam_size = config.beam_size
         self.is_sample = config.is_sample
 
-        self.idx_start = config.vocab_to_idx[TOKEN_START]
+        self.idx_start = config.vocab_to_idx[TOKEN_BOS]
         self.idx_eos = config.vocab_to_idx[TOKEN_EOS]
         self.idx_pad = config.vocab_to_idx[TOKEN_PAD]
         self.idx_unk = config.vocab_to_idx[TOKEN_UNK]
@@ -129,8 +129,8 @@ class Model(object):
         }
 
     # 生成回复的方法.
-    # 思路:   1.首先将Question传入Encoder,得到隐藏状态c;
-    #        2.传入<start>生成第一个单词,并得到decoder的新隐藏状态c;
+    # 思路:   1.首先将Question传入Encoder,得到隐藏状态c,h;
+    #        2.传入<start>生成第一个单词,并得到decoder的新隐藏状态c,h;
     #        3.传入刚才生成的单词,继续预测下一个单词.
     def generate(self, sess, inp):
         inp_index = [seq_index(self.vocab_to_idx, inp)]
@@ -141,7 +141,7 @@ class Model(object):
 
         if self.is_beams:
             beams = [(0.0, "", [])]
-            tdata = self.vocab_to_idx[TOKEN_START]
+            tdata = self.vocab_to_idx[TOKEN_BOS]
             prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
                                                 self.initial_state: state_})
@@ -179,7 +179,7 @@ class Model(object):
             return beams[0][1]
 
         else:
-            tdata = self.vocab_to_idx[TOKEN_START]
+            tdata = self.vocab_to_idx[TOKEN_BOS]
             prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
                                                 self.initial_state: state_})

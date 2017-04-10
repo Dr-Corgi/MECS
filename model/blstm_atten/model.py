@@ -1,10 +1,10 @@
 # -*- coding:utf8 -*-
 import tensorflow as tf
-from tensorflow.contrib.rnn import LSTMCell, LSTMStateTuple
+from tensorflow.contrib.rnn import LSTMCell, AttentionCellWrapper, LSTMStateTuple, BasicLSTMCell
 from tensorflow.contrib.layers import linear
 from util.dictutil import load_dict
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
-from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
+from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
 import numpy as np
 
 
@@ -46,7 +46,7 @@ class Model(object):
         if self.is_beams: self.beam_size = config.beam_size
         self.is_sample = config.is_sample
 
-        self.idx_start = config.vocab_to_idx[TOKEN_BOS]
+        self.idx_start = config.vocab_to_idx[TOKEN_START]
         self.idx_eos = config.vocab_to_idx[TOKEN_EOS]
         self.idx_pad = config.vocab_to_idx[TOKEN_PAD]
         self.idx_unk = config.vocab_to_idx[TOKEN_UNK]
@@ -88,6 +88,12 @@ class Model(object):
                 c=encoder_final_state_c,
                 h=encoder_final_state_h
             )
+
+            #[self.encoder_outputs,
+            # self.encoder_final_state] = tf.nn.dynamic_rnn(cell=encoder_cell,
+            #                                               inputs=encoder_inputs_embedded,
+            #                                               dtype=tf.float32,
+            #                                               time_major=True)
 
         decoder_cell = LSTMCell(num_units=(hidden_unit*2))
         self.initial_state = self.encoder_final_state
@@ -145,8 +151,8 @@ class Model(object):
         }
 
     # 生成回复的方法.
-    # 思路:   1.首先将Question传入Encoder,得到隐藏状态c,h;
-    #        2.传入<start>生成第一个单词,并得到decoder的新隐藏状态c,h;
+    # 思路:   1.首先将Question传入Encoder,得到隐藏状态c;
+    #        2.传入<start>生成第一个单词,并得到decoder的新隐藏状态c;
     #        3.传入刚才生成的单词,继续预测下一个单词.
     def generate(self, sess, inp):
         inp_index = [seq_index(self.vocab_to_idx, inp)]
@@ -157,7 +163,7 @@ class Model(object):
 
         if self.is_beams:
             beams = [(0.0, "", [])]
-            tdata = self.vocab_to_idx[TOKEN_BOS]
+            tdata = self.vocab_to_idx[TOKEN_START]
             prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
                                                 self.initial_state: state_})
@@ -195,7 +201,7 @@ class Model(object):
             return beams[0][1]
 
         else:
-            tdata = self.vocab_to_idx[TOKEN_BOS]
+            tdata = self.vocab_to_idx[TOKEN_START]
             prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
                                                 self.initial_state: state_})
