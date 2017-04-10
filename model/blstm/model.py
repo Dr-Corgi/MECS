@@ -7,26 +7,16 @@ from util.datautil import batch_generator, load_corpus, batch_op, seq_index, din
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
 import numpy as np
 
-'''
-最基本的生成模型.
-使用单向LSTM作为ENCODER.
-使用单向LSTM作为DECODER.
-不使用SAMPLE.
-不使用BEAM SEARCH.
-不使用ATTENTION.
-训练过程中采用TARGET中的字符,而不是上一次输出的结果.
-'''
-
 
 # Configuration
 class Config(object):
     def __init__(self):
         self.embedding_size = 128
         self.hidden_unit = 128
-        self.save_path = "./../save/lstm/"
-        self.model_name = "BasicModel"
-        self.dict_file = "./../dict/dict_500.dict"
-        self.corpus_file = "./../data/tiny_data.json"
+        self.save_path = "./../../save/blstm/"
+        self.model_name = "BiLSTM-Model"
+        self.dict_file = "./../../dict/dict_500.dict"
+        self.corpus_file = "./../../data/tiny_data.json"
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
         self.vocab_size = len(self.vocab_to_idx)
         self.max_batch = 1001
@@ -78,13 +68,34 @@ class Model(object):
         encoder_cell = LSTMCell(num_units=hidden_unit)
 
         with tf.variable_scope("encoder"):
-            [self.encoder_outputs,
-             self.encoder_final_state] = tf.nn.dynamic_rnn(cell=encoder_cell,
-                                                           inputs=encoder_inputs_embedded,
-                                                           dtype=tf.float32,
-                                                           time_major=True)
 
-        decoder_cell = LSTMCell(num_units=hidden_unit)
+            ((output_fw,
+              output_bw),
+             (output_state_fw,
+              output_state_bw)) = tf.nn.bidirectional_dynamic_rnn(cell_fw=encoder_cell,
+                                                                  cell_bw=encoder_cell,
+                                                                  inputs=encoder_inputs_embedded,
+                                                                  sequence_length=self.encoder_inputs_length,
+                                                                  dtype=tf.float32,
+                                                                  time_major=True)
+
+            self.encoder_outputs = tf.concat((output_fw, output_bw), 2)
+
+            encoder_final_state_c = tf.concat((output_state_fw.c, output_state_bw.c), 1)
+            encoder_final_state_h = tf.concat((output_state_fw.h, output_state_bw.h), 1)
+
+            self.encoder_final_state = LSTMStateTuple(
+                c=encoder_final_state_c,
+                h=encoder_final_state_h
+            )
+
+            #[self.encoder_outputs,
+            # self.encoder_final_state] = tf.nn.dynamic_rnn(cell=encoder_cell,
+            #                                               inputs=encoder_inputs_embedded,
+            #                                               dtype=tf.float32,
+            #                                               time_major=True)
+
+        decoder_cell = LSTMCell(num_units=(hidden_unit*2))
         self.initial_state = self.encoder_final_state
         decoder_inputs_embedded = tf.nn.embedding_lookup(self.embeddings, self.decoder_inputs)
         with tf.variable_scope("decoder"):
@@ -251,9 +262,9 @@ if __name__ == "__main__":
                               batch_size=config.batch_size,
                               word_to_index=config.vocab_to_idx)
     model.variables_init(sess)
-    #model.train(sess)
+    model.train(sess)
     #model.save(sess, 100)
     #sess = tf.Session()
-    sess = model.restore(sess, 800)
+    #sess = model.restore(sess, 800)
     response = model.generate(sess, "我 对此 感到 非常 开心")
     print response

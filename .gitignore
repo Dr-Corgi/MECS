@@ -4,7 +4,9 @@
 data/*
 */__init__.py
 save/lstm/*
+save/blstm/*
 *.pyc
 */*.pyc
 backup/*
 model/lstm/__init__.py
+model/blstm/__init__.py
