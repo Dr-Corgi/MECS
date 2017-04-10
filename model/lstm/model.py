@@ -23,7 +23,7 @@ class Config(object):
     def __init__(self):
         self.embedding_size = 128
         self.hidden_unit = 128
-        self.save_path = "./../save/basic/"
+        self.save_path = "./../save/lstm/"
         self.model_name = "BasicModel"
         self.dict_file = "./../dict/dict_500.dict"
         self.corpus_file = "./../data/tiny_data.json"

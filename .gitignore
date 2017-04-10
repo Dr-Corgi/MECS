@@ -3,8 +3,8 @@
 */.DS_Store
 data/*
 */__init__.py
-save/basic/*
+save/lstm/*
 *.pyc
 */*.pyc
 backup/*
-model/basic/__init__.py
+model/lstm/__init__.py
