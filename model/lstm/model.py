@@ -1,6 +1,6 @@
 # -*- coding:utf8 -*-
 import tensorflow as tf
-from tensorflow.contrib.rnn import LSTMCell, AttentionCellWrapper, LSTMStateTuple, BasicLSTMCell
+from tensorflow.contrib.rnn import LSTMCell
 from tensorflow.contrib.layers import linear
 from util.dictutil import load_dict
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
@@ -12,10 +12,10 @@ class Config(object):
     def __init__(self):
         self.embedding_size = 128
         self.hidden_unit = 128
-        self.save_path = "./../save/lstm/"
-        self.model_name = "BasicModel"
-        self.dict_file = "./../dict/dict_500.dict"
-        self.corpus_file = "./../data/tiny_data.json"
+        self.save_path = "./../../save/lstm/"
+        self.model_name = "LSTM-Model"
+        self.dict_file = "./../../dict/dict_500.dict"
+        self.corpus_file = "./../../data/tiny_data.json"
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
         self.vocab_size = len(self.vocab_to_idx)
         self.max_batch = 1001
@@ -240,7 +240,7 @@ if __name__ == "__main__":
                               batch_size=config.batch_size,
                               word_to_index=config.vocab_to_idx)
     model.variables_init(sess)
-    #model.train(sess)
+    model.train(sess)
     #model.save(sess, 100)
     #sess = tf.Session()
     sess = model.restore(sess, 800)
