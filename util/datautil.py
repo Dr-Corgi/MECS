@@ -1,7 +1,7 @@
 # -*- coding:utf8 -*-
 import json
 from numpy.random import shuffle
-from conf.profile import TOKEN_UNK, TOKEN_EOS, TOKEN_START
+from conf.profile import TOKEN_UNK, TOKEN_EOS, TOKEN_BOS
 import numpy as np
 
 

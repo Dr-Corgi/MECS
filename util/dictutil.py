@@ -36,7 +36,7 @@ def build_dict(file_name, dict_path, vocab_size=30000, encoding='utf8'):
         f_out.write(str(unk_count))
         f_out.write('\n')
         f_out.write('<pad>\t0\n')
-        f_out.write('<start>\t0\n')
+        f_out.write('<bos>\t0\n')
         f_out.write('<eos>\t0\n')
 
         for word, freq in sorted_dict[:(vocab_size-4)]:

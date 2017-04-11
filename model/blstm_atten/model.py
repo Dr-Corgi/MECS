@@ -1,11 +1,12 @@
 # -*- coding:utf8 -*-
 import tensorflow as tf
-from tensorflow.contrib.rnn import LSTMCell, AttentionCellWrapper, LSTMStateTuple, BasicLSTMCell
+from tensorflow.contrib.rnn import LSTMCell, LSTMStateTuple
 from tensorflow.contrib.layers import linear
 from util.dictutil import load_dict
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
-from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_START, TOKEN_UNK
+from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
+from tensorflow.python.ops import array_ops
 
 
 # Configuration
@@ -13,8 +14,8 @@ class Config(object):
     def __init__(self):
         self.embedding_size = 128
         self.hidden_unit = 128
-        self.save_path = "./../../save/blstm/"
-        self.model_name = "BiLSTM-Model"
+        self.save_path = "./../../save/blstma/"
+        self.model_name = "BiLSTM-Model-With-Attention"
         self.dict_file = "./../../dict/dict_500.dict"
         self.corpus_file = "./../../data/tiny_data.json"
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
@@ -28,6 +29,8 @@ class Config(object):
         self.beam_size = 3
 
         self.is_sample = True
+
+        self.attention_size = 128
 
 class Model(object):
 
@@ -46,7 +49,7 @@ class Model(object):
         if self.is_beams: self.beam_size = config.beam_size
         self.is_sample = config.is_sample
 
-        self.idx_start = config.vocab_to_idx[TOKEN_START]
+        self.idx_start = config.vocab_to_idx[TOKEN_BOS]
         self.idx_eos = config.vocab_to_idx[TOKEN_EOS]
         self.idx_pad = config.vocab_to_idx[TOKEN_PAD]
         self.idx_unk = config.vocab_to_idx[TOKEN_UNK]
@@ -54,6 +57,8 @@ class Model(object):
         self.vocab_size = vocab_size = config.vocab_size
         self.embedding_size = embedding_size = config.embedding_size
         self.hidden_unit = hidden_unit = config.hidden_unit
+        self.attention_size = attention_size = config.attention_size
+        self.batch_size = config.batch_size
 
         self.encoder_inputs = tf.placeholder(dtype=tf.int32, shape=(None, None), name='encoder_inputs')
         self.encoder_inputs_length = tf.placeholder(dtype=tf.int32, shape=(None,), name='encoder_inputs_length')
@@ -88,12 +93,6 @@ class Model(object):
                 c=encoder_final_state_c,
                 h=encoder_final_state_h
             )
-
-            #[self.encoder_outputs,
-            # self.encoder_final_state] = tf.nn.dynamic_rnn(cell=encoder_cell,
-            #                                               inputs=encoder_inputs_embedded,
-            #                                               dtype=tf.float32,
-            #                                               time_major=True)
 
         decoder_cell = LSTMCell(num_units=(hidden_unit*2))
         self.initial_state = self.encoder_final_state
@@ -163,7 +162,7 @@ class Model(object):
 
         if self.is_beams:
             beams = [(0.0, "", [])]
-            tdata = self.vocab_to_idx[TOKEN_START]
+            tdata = self.vocab_to_idx[TOKEN_BOS]
             prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
                                                 self.initial_state: state_})
@@ -201,7 +200,7 @@ class Model(object):
             return beams[0][1]
 
         else:
-            tdata = self.vocab_to_idx[TOKEN_START]
+            tdata = self.vocab_to_idx[TOKEN_BOS]
             prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
                                                 self.initial_state: state_})
