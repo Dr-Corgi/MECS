@@ -6,13 +6,13 @@ from util.dictutil import load_dict
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
-
+from custom_cell import CustomCell
 
 # Configuration
 class Config(object):
     def __init__(self):
-        self.embedding_size = 128
-        self.hidden_unit = 128
+        self.embedding_size = 40
+        self.hidden_unit = 40
         self.save_path = "./../../save/blstma/"
         self.model_name = "BiLSTM-Model-With-Attention"
         self.dict_file = "./../../dict/dict_500.dict"
@@ -89,7 +89,8 @@ class Model(object):
                 h=encoder_final_state_h
             )
 
-        decoder_cell = LSTMCell(num_units=(hidden_unit*2))
+        #decoder_cell = LSTMCell(num_units=(hidden_unit*2))
+        decoder_cell = CustomCell(num_units=(hidden_unit*2), encoder_outp=self.encoder_outputs)
         self.initial_state = self.encoder_final_state
         decoder_inputs_embedded = tf.nn.embedding_lookup(self.embeddings, self.decoder_inputs)
         with tf.variable_scope("decoder"):
@@ -160,7 +161,9 @@ class Model(object):
             tdata = self.vocab_to_idx[TOKEN_BOS]
             prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
-                                                self.initial_state: state_})
+                                                self.encoder_inputs: einp,
+                                                self.encoder_inputs_length: einp_len,
+                                                self.initial_state: state_},)
 
             y = np.log(1e-20 + prob_.reshape(-1))
             if self.is_sample:
@@ -180,6 +183,8 @@ class Model(object):
                     tdata = np.int32(b[2])
                     prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                              feed_dict={self.decoder_inputs: [[tdata]],
+                                                        self.encoder_inputs: einp,
+                                                        self.encoder_inputs_length: einp_len,
                                                         self.initial_state: b[3]})
                     y = np.log(1e-20 + prob_.reshape(-1))
                     if self.is_sample:
@@ -198,6 +203,8 @@ class Model(object):
             tdata = self.vocab_to_idx[TOKEN_BOS]
             prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                      feed_dict={self.decoder_inputs: [[tdata]],
+                                                self.encoder_inputs: einp,
+                                                self.encoder_inputs_length: einp_len,
                                                 self.initial_state: state_})
 
             if self.is_sample:
@@ -211,6 +218,8 @@ class Model(object):
             for _ in range(self.max_generate_len-1):
                 prob_, state_ = sess.run([self.prob, self.decoder_final_state],
                                             feed_dict={self.decoder_inputs: [[tdata]],
+                                                       self.encoder_inputs: einp,
+                                                       self.encoder_inputs_length: einp_len,
                                                        self.initial_state: state_})
                 if self.is_sample:
                     gen = np.random.choice(self.vocab_size, 1, replace=False, p=prob_.reshape(-1))
