@@ -12,3 +12,4 @@ backup/*
 model/lstm/__init__.py
 model/blstm/__init__.py
 model/blstm_atten/__init__.py
+test/*

@@ -256,7 +256,7 @@ if __name__ == "__main__":
                               batch_size=config.batch_size,
                               word_to_index=config.vocab_to_idx)
     model.variables_init(sess)
-    model.train(sess)
+    #model.train(sess)
     #model.save(sess, 100)
     #sess = tf.Session()
     #sess = model.restore(sess, 800)
