@@ -6,7 +6,6 @@ from util.dictutil import load_dict
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
-from tensorflow.python.ops import array_ops
 
 
 # Configuration
@@ -29,8 +28,6 @@ class Config(object):
         self.beam_size = 3
 
         self.is_sample = True
-
-        self.attention_size = 128
 
 class Model(object):
 
@@ -57,8 +54,6 @@ class Model(object):
         self.vocab_size = vocab_size = config.vocab_size
         self.embedding_size = embedding_size = config.embedding_size
         self.hidden_unit = hidden_unit = config.hidden_unit
-        self.attention_size = attention_size = config.attention_size
-        self.batch_size = config.batch_size
 
         self.encoder_inputs = tf.placeholder(dtype=tf.int32, shape=(None, None), name='encoder_inputs')
         self.encoder_inputs_length = tf.placeholder(dtype=tf.int32, shape=(None,), name='encoder_inputs_length')
@@ -150,8 +145,8 @@ class Model(object):
         }
 
     # 生成回复的方法.
-    # 思路:   1.首先将Question传入Encoder,得到隐藏状态c;
-    #        2.传入<start>生成第一个单词,并得到decoder的新隐藏状态c;
+    # 思路:   1.首先将Question传入Encoder,得到隐藏状态c,h;
+    #        2.传入<start>生成第一个单词,并得到decoder的新隐藏状态c,h;
     #        3.传入刚才生成的单词,继续预测下一个单词.
     def generate(self, sess, inp):
         inp_index = [seq_index(self.vocab_to_idx, inp)]
