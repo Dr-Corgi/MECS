@@ -79,3 +79,29 @@ def dinput_op(inputs, pad_idx, start_idx, max_sequence_length=None):
     dinput_time_major = dinput_batch_major.swapaxes(0,1)
 
     return dinput_time_major, sequence_lengths
+
+def splitData(test_size = 10,
+              validation_size = 1,
+              source_fn="./../data/train_data.json",
+              train_fn="./../data/split_train.json",
+              test_fn="./../data/split_test.json",
+              valid_fn="./../data/split_valid.json"):
+    data = load_corpus(source_fn)
+    sample_t = np.random.choice(range(len(data)), test_size, False)
+    sample_v = np.random.choice(range(len(data)), validation_size, False)
+
+    data_t = list()
+    data_v = list()
+    data_o = list()
+
+    for i in range(len(data)):
+        if i in sample_t:
+            data_t.append(data[i])
+        elif i in sample_v:
+            data_v.append(data[i])
+        else:
+            data_o.append(data[i])
+
+    json.dump(data_t, open(test_fn, 'w'))
+    json.dump(data_v, open(valid_fn, 'w'))
+    json.dump(data_o, open(train_fn, 'w'))
