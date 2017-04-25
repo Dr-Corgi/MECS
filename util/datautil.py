@@ -14,22 +14,39 @@ def load_corpus(corpus_name, encoding='utf8'):
 def batch_generator(corpus, batch_size, word_to_index):
     current_index = 0
     while True:
-        if current_index + batch_size > len(corpus):
-            shuffle(corpus)
-            current_index = 0
-
         r_q = list()    # 问题文本
         r_a = list()    # 回复文本
         r_qe = list()   # 问题情绪标签
         r_ae = list()   # 回复情绪标签
 
-        for [q,qe],[a,ae] in corpus[current_index: current_index+batch_size]:
-            r_q.append(seq_index(word_to_index, q.strip().split(" ")))
-            r_a.append(seq_index(word_to_index, a.strip().split(" ")))
-            r_qe.append(qe)
-            r_ae.append(ae)
+        if current_index + batch_size > len(corpus):
+            for [q, qe],[a,ae] in corpus[current_index:]:
+                r_q.append(seq_index(word_to_index, q.strip().split(" ")))
+                r_a.append(seq_index(word_to_index, a.strip().split(" ")))
+                r_qe.append(qe)
+                r_ae.append(ae)
 
-        current_index += batch_size
+            shuffle(corpus)
+            current_index = 0
+
+            r_q_len = len(r_q)
+
+            for [q, qe],[a,ae] in corpus[current_index: current_index+(batch_size-r_q_len)]:
+                r_q.append(seq_index(word_to_index, q.strip().split(" ")))
+                r_a.append(seq_index(word_to_index, a.strip().split(" ")))
+                r_qe.append(qe)
+                r_ae.append(ae)
+
+            assert len(r_q) == batch_size
+
+        else:
+            for [q,qe],[a,ae] in corpus[current_index: current_index+batch_size]:
+                r_q.append(seq_index(word_to_index, q.strip().split(" ")))
+                r_a.append(seq_index(word_to_index, a.strip().split(" ")))
+                r_qe.append(qe)
+                r_ae.append(ae)
+
+            current_index += batch_size
 
         yield [r_q, r_a, r_qe, r_ae]
 
@@ -80,8 +97,8 @@ def dinput_op(inputs, pad_idx, start_idx, max_sequence_length=None):
 
     return dinput_time_major, sequence_lengths
 
-def splitData(test_size = 10,
-              validation_size = 1,
+def splitData(test_size = 100000,
+              validation_size = 10000,
               source_fn="./../data/train_data.json",
               train_fn="./../data/split_train.json",
               test_fn="./../data/split_test.json",
