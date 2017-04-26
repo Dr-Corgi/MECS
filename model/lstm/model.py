@@ -12,10 +12,10 @@ class Config(object):
     def __init__(self):
         self.embedding_size = 128
         self.hidden_unit = 128
-        self.save_path = "./../../save/lstm/"
+        self.save_path = "./save/lstm/"
         self.model_name = "LSTM-Model"
-        self.dict_file = "./../../dict/dict_500.dict"
-        self.corpus_file = "./../../data/tiny_data.json"
+        self.dict_file = "./dict/dict_500.dict"
+        self.corpus_file = "./data/split_valid.json"
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
         self.vocab_size = len(self.vocab_to_idx)
         self.max_batch = 1001
@@ -27,6 +27,8 @@ class Config(object):
         self.beam_size = 3
 
         self.is_sample = True
+
+        self.is_pretrained = True
 
 class Model(object):
 
@@ -64,7 +66,13 @@ class Model(object):
         self.decoder_targets = tf.placeholder(dtype=tf.int32, shape=(None, None), name='decoder_targets')
 
         with tf.device("/cpu:0"):
-            self.embeddings = tf.Variable(tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0), dtype=tf.float32)
+            if config.is_pretrained:
+                self.embeddings = tf.Variable(tf.constant(0.0, shape=[vocab_size, embedding_size]),
+                                              trainable=False, name='embeddings')
+                embeddings_placeholder = tf.placeholder(tf.float32, [vocab_size, embedding_size]),
+                self.embedding_init = self.embeddings.assign(embeddings_placeholder)
+            else:
+                self.embeddings = tf.Variable(tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0), dtype=tf.float32)
 
         encoder_inputs_embedded = tf.nn.embedding_lookup(self.embeddings, self.encoder_inputs)
 
@@ -114,7 +122,7 @@ class Model(object):
 
             if batch % self.save_step == 0 and batch != 0:
                 print('batch {}'.format(batch))
-                print('  minibatch loss: {}').format(sess.run(self.loss, fd))
+                print('  minibatch loss: {}'.format(sess.run(self.loss, fd)))
                 predict_ = sess.run(self.decoder_prediction, fd)
                 self.__print_result(fd[self.decoder_targets], predict_)
                 self.save(sess, batch)

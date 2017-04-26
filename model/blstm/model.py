@@ -13,10 +13,10 @@ class Config(object):
     def __init__(self):
         self.embedding_size = 128
         self.hidden_unit = 128
-        self.save_path = "./../../save/blstm/"
+        self.save_path = "./save/blstm/"
         self.model_name = "BiLSTM-Model"
-        self.dict_file = "./../../dict/dict_500.dict"
-        self.corpus_file = "./../../data/tiny_data.json"
+        self.dict_file = "./dict/dict_500.dict"
+        self.corpus_file = "./data/split_valid.json"
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
         self.vocab_size = len(self.vocab_to_idx)
         self.max_batch = 1001
@@ -130,7 +130,7 @@ class Model(object):
 
             if batch % self.save_step == 0 and batch != 0:
                 print('batch {}'.format(batch))
-                print('  minibatch loss: {}').format(sess.run(self.loss, fd))
+                print('  minibatch loss: {}'.format(sess.run(self.loss, fd)))
                 predict_ = sess.run(self.decoder_prediction, fd)
                 self.__print_result(fd[self.decoder_targets], predict_)
                 self.save(sess, batch)
