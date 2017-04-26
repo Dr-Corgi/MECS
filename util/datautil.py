@@ -122,3 +122,21 @@ def splitData(test_size = 100000,
     json.dump(data_t, open(test_fn, 'w'))
     json.dump(data_v, open(valid_fn, 'w'))
     json.dump(data_o, open(train_fn, 'w'))
+
+def loadPretrainedVector(vocab_size, embedding_size, pretrain_file):
+    vocab_to_idx = {}
+    idx_to_vocab = {}
+    vocab_embed = []
+    with open(pretrain_file, encoding='utf8') as fin:
+        line_0 = fin.readline().strip().split(" ")
+        assert int(line_0[0]) >= vocab_size
+        assert int(line_0[1]) == embedding_size
+        for i in range(vocab_size):
+            line_ = fin.readline().strip().split(" ")
+            voc = line_[0]
+            vec = [float(n) for n in line_[1:]]
+            vocab_to_idx[voc] = len(vocab_to_idx)
+            idx_to_vocab[len(idx_to_vocab)] = voc
+            vocab_embed.append(vec)
+
+    return vocab_to_idx, idx_to_vocab, np.asarray(vocab_embed)

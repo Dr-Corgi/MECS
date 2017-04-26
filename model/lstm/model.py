@@ -3,21 +3,21 @@ import tensorflow as tf
 from tensorflow.contrib.rnn import LSTMCell
 from tensorflow.contrib.layers import linear
 from util.dictutil import load_dict
-from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
+from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op, loadPretrainedVector
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
 
 # Configuration
 class Config(object):
     def __init__(self):
-        self.embedding_size = 128
+        self.embedding_size = 50
         self.hidden_unit = 128
         self.save_path = "./save/lstm/"
         self.model_name = "LSTM-Model"
         self.dict_file = "./dict/dict_500.dict"
         self.corpus_file = "./data/split_valid.json"
-        self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
-        self.vocab_size = len(self.vocab_to_idx)
+        self.vector_file = "./dict/vector/wiki.zh.small.text.vector"
+        self.vocab_size = 500
         self.max_batch = 1001
         self.save_step = 200
         self.batch_size = 5
@@ -34,27 +34,28 @@ class Model(object):
 
     def __init__(self, config):
 
-        self.batcher = batch_generator(load_corpus(config.corpus_file),
-                                       batch_size=config.batch_size,
-                                       word_to_index=config.vocab_to_idx)
-
-        self.vocab_to_idx = config.vocab_to_idx
-        self.idx_to_vocab = config.idx_to_vocab
+        #self.vocab_to_idx = config.vocab_to_idx
+        #self.idx_to_vocab = config.idx_to_vocab
 
         self.save_path = config.save_path
         self.model_name = config.model_name
         self.save_step = config.save_step
         self.max_batch = config.max_batch
         self.max_generate_len = config.max_generate_len
+        self.batch_size = config.batch_size
 
         self.is_beams = config.is_beams
         if self.is_beams: self.beam_size = config.beam_size
         self.is_sample = config.is_sample
 
-        self.idx_start = config.vocab_to_idx[TOKEN_BOS]
-        self.idx_eos = config.vocab_to_idx[TOKEN_EOS]
-        self.idx_pad = config.vocab_to_idx[TOKEN_PAD]
-        self.idx_unk = config.vocab_to_idx[TOKEN_UNK]
+        self.corpus_file = config.corpus_file
+
+        self.is_pretrained = config.is_pretrained
+
+        self.idx_start = 0 # 0
+        self.idx_eos = 1 # 1
+        self.idx_pad = 2 # 2
+        self.idx_unk = 3 # 3
 
         self.vocab_size = vocab_size = config.vocab_size
         self.embedding_size = embedding_size = config.embedding_size
@@ -67,11 +68,13 @@ class Model(object):
 
         with tf.device("/cpu:0"):
             if config.is_pretrained:
+                self.vector_file = config.vector_file
                 self.embeddings = tf.Variable(tf.constant(0.0, shape=[vocab_size, embedding_size]),
                                               trainable=False, name='embeddings')
-                embeddings_placeholder = tf.placeholder(tf.float32, [vocab_size, embedding_size]),
-                self.embedding_init = self.embeddings.assign(embeddings_placeholder)
+                self.embeddings_placeholder = tf.placeholder(tf.float32, shape=[vocab_size, embedding_size]),
+                self.embedding_init = self.embeddings.assign(tf.reshape(self.embeddings_placeholder, [vocab_size, embedding_size]))
             else:
+                self.dict_file = config.dict_file
                 self.embeddings = tf.Variable(tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0), dtype=tf.float32)
 
         encoder_inputs_embedded = tf.nn.embedding_lookup(self.embeddings, self.encoder_inputs)
@@ -112,6 +115,17 @@ class Model(object):
 
     def variables_init(self, sess):
         sess.run(tf.global_variables_initializer())
+        self.dict_init(sess)
+        self.batcher = batch_generator(load_corpus(self.corpus_file),
+                                       batch_size=self.batch_size,
+                                       word_to_index=self.vocab_to_idx)
+
+    def dict_init(self, sess):
+        if self.is_pretrained:
+            self.vocab_to_idx, self.idx_to_vocab, vocab_emb = loadPretrainedVector(self.vocab_size, self.embedding_size, self.vector_file)
+            sess.run(self.embedding_init, feed_dict={self.embeddings_placeholder: vocab_emb})
+        else:
+            self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
 
     def train(self, sess):
         loss_track = []
