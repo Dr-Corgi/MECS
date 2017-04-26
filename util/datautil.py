@@ -7,7 +7,7 @@ import numpy as np
 
 # 读取语料,返回语料列表,格式为[[Q1, EQ1, A1, EA1],...]
 def load_corpus(corpus_name, encoding='utf8'):
-    return json.load(open(corpus_name), encoding)
+    return json.load(open(corpus_name, encoding=encoding))
 
 
 # 根据语料和词典生成训练batch
@@ -99,10 +99,10 @@ def dinput_op(inputs, pad_idx, start_idx, max_sequence_length=None):
 
 def splitData(test_size = 100000,
               validation_size = 10000,
-              source_fn="./../data/train_data.json",
-              train_fn="./../data/split_train.json",
-              test_fn="./../data/split_test.json",
-              valid_fn="./../data/split_valid.json"):
+              source_fn="./data/train_data.json",
+              train_fn="./data/split_train.json",
+              test_fn="./data/split_test.json",
+              valid_fn="./data/split_valid.json"):
     data = load_corpus(source_fn)
     sample_t = np.random.choice(range(len(data)), test_size, False)
     sample_v = np.random.choice(range(len(data)), validation_size, False)
