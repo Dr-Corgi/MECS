@@ -6,22 +6,22 @@ from util.dictutil import load_dict
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
-from custom_cell import CustomCell
+from model.blstm_atten.custom_cell import CustomCell
 
 # Configuration
 class Config(object):
     def __init__(self):
         self.embedding_size = 40
         self.hidden_unit = 40
-        self.save_path = "./../../save/blstma/"
+        self.save_path = "./save/blstma/"
         self.model_name = "BiLSTM-Model-With-Attention"
-        self.dict_file = "./../../dict/dict_500.dict"
-        self.corpus_file = "./../../data/tiny_data.json"
+        self.dict_file = "./dict/dict_30000.dict"
+        self.corpus_file = "./data/split_valid.json"
         self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
         self.vocab_size = len(self.vocab_to_idx)
-        self.max_batch = 1001
+        self.max_batch = 10001
         self.save_step = 200
-        self.batch_size = 5
+        self.batch_size = 128
         self.max_generate_len = 10
 
         self.is_beams = True
@@ -32,6 +32,10 @@ class Config(object):
 class Model(object):
 
     def __init__(self, config):
+
+        self.batcher = batch_generator(load_corpus(config.corpus_file),
+                              batch_size=config.batch_size,
+                              word_to_index=config.vocab_to_idx)
 
         self.vocab_to_idx = config.vocab_to_idx
         self.idx_to_vocab = config.idx_to_vocab
@@ -127,13 +131,13 @@ class Model(object):
 
             if batch % self.save_step == 0 and batch != 0:
                 print('batch {}'.format(batch))
-                print('  minibatch loss: {}').format(sess.run(self.loss, fd))
+                print('  minibatch loss: {}'.format(sess.run(self.loss, fd)))
                 predict_ = sess.run(self.decoder_prediction, fd)
                 self.__print_result(fd[self.decoder_targets], predict_)
                 self.save(sess, batch)
 
     def next_feed(self):
-        [r_q, r_a, r_qe, r_ae] = batcher.next()
+        [r_q, r_a, r_qe, r_ae] = next(self.batcher)
         encoder_inputs_, encoder_inputs_length_ = batch_op(r_q, self.idx_pad)
         decoder_targets_, _ = batch_op(r_a, self.idx_pad)
         decoder_inputs_, _ = dinput_op(r_a, self.idx_pad, self.idx_start)
@@ -172,7 +176,7 @@ class Model(object):
                 top_indices = np.argsort(-y)
             b = beams[0]
             beam_candidates = []
-            for bc in xrange(self.beam_size):
+            for bc in range(self.beam_size):
                 vocab_idx = top_indices[bc]
                 beam_candidates.append((b[0]+y[vocab_idx], b[1]+self.idx_to_vocab[vocab_idx], vocab_idx, state_))
             beam_candidates.sort(key=lambda x:x[0], reverse=True)
@@ -191,7 +195,7 @@ class Model(object):
                         top_indices = np.random.choice(self.vocab_size, self.beam_size, replace=False, p=prob_.reshape(-1))
                     else:
                         top_indices = np.argsort(-y)
-                    for bc in xrange(self.beam_size):
+                    for bc in range(self.beam_size):
                         vocab_idx = top_indices[bc]
                         beam_candidates.append((b[0]+y[vocab_idx], b[1]+self.idx_to_vocab[vocab_idx], vocab_idx, state_))
                     beam_candidates.sort(key=lambda x:x[0], reverse=True)
@@ -244,7 +248,7 @@ class Model(object):
             print(str_pred)
             if i >= 2:
                 break
-            print ""
+            print("")
 
     def save(self, sess, step):
         saver = tf.train.Saver()
@@ -261,13 +265,11 @@ if __name__ == "__main__":
     config = Config()
     model = Model(config)
     sess = tf.Session()
-    batcher = batch_generator(load_corpus(config.corpus_file),
-                              batch_size=config.batch_size,
-                              word_to_index=config.vocab_to_idx)
+
     model.variables_init(sess)
     #model.train(sess)
     #model.save(sess, 100)
     #sess = tf.Session()
     #sess = model.restore(sess, 800)
-    response = model.generate(sess, "我 对此 感到 非常 开心")
-    print response
+    #response = model.generate(sess, "我 对此 感到 非常 开心")
+    #print response

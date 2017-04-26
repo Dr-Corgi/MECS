@@ -32,6 +32,10 @@ class Model(object):
 
     def __init__(self, config):
 
+        self.batcher = batch_generator(load_corpus(config.corpus_file),
+                                       batch_size=config.batch_size,
+                                       word_to_index=config.vocab_to_idx)
+
         self.vocab_to_idx = config.vocab_to_idx
         self.idx_to_vocab = config.idx_to_vocab
 
@@ -116,7 +120,7 @@ class Model(object):
                 self.save(sess, batch)
 
     def next_feed(self):
-        [r_q, r_a, r_qe, r_ae] = batcher.next()
+        [r_q, r_a, r_qe, r_ae] = next(self.batcher)
         encoder_inputs_, encoder_inputs_length_ = batch_op(r_q, self.idx_pad)
         decoder_targets_, _ = batch_op(r_a, self.idx_pad)
         decoder_inputs_, _ = dinput_op(r_a, self.idx_pad, self.idx_start)
@@ -153,7 +157,7 @@ class Model(object):
                 top_indices = np.argsort(-y)
             b = beams[0]
             beam_candidates = []
-            for bc in xrange(self.beam_size):
+            for bc in range(self.beam_size):
                 vocab_idx = top_indices[bc]
                 beam_candidates.append((b[0]+y[vocab_idx], b[1]+self.idx_to_vocab[vocab_idx], vocab_idx, state_))
             beam_candidates.sort(key=lambda x:x[0], reverse=True)
@@ -170,7 +174,7 @@ class Model(object):
                         top_indices = np.random.choice(self.vocab_size, self.beam_size, replace=False, p=prob_.reshape(-1))
                     else:
                         top_indices = np.argsort(-y)
-                    for bc in xrange(self.beam_size):
+                    for bc in range(self.beam_size):
                         vocab_idx = top_indices[bc]
                         beam_candidates.append((b[0]+y[vocab_idx], b[1]+self.idx_to_vocab[vocab_idx], vocab_idx, state_))
                     beam_candidates.sort(key=lambda x:x[0], reverse=True)
@@ -219,7 +223,7 @@ class Model(object):
             print(str_pred)
             if i >= 2:
                 break
-            print ""
+            print(" ")
 
     def save(self, sess, step):
         saver = tf.train.Saver()
@@ -229,20 +233,3 @@ class Model(object):
         saver = tf.train.Saver()
         saver.restore(sess, self.save_path+self.model_name+'-'+str(step))
         return sess
-
-
-if __name__ == "__main__":
-
-    config = Config()
-    model = Model(config)
-    sess = tf.Session()
-    batcher = batch_generator(load_corpus(config.corpus_file),
-                              batch_size=config.batch_size,
-                              word_to_index=config.vocab_to_idx)
-    model.variables_init(sess)
-    model.train(sess)
-    #model.save(sess, 100)
-    #sess = tf.Session()
-    sess = model.restore(sess, 800)
-    response = model.generate(sess, "我 对此 感到 非常 开心")
-    print response
