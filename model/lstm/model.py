@@ -2,8 +2,9 @@
 import tensorflow as tf
 from tensorflow.contrib.rnn import LSTMCell
 from tensorflow.contrib.layers import linear
-from util.dictutil import load_dict
-from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op, loadPretrainedVector
+from util.dictutil import load_dict, loadPretrainedVector
+from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
+from util.trackutil import LossTracker
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
 
@@ -11,24 +12,22 @@ import numpy as np
 class Config(object):
     def __init__(self):
         self.embedding_size = 50
-        self.hidden_unit = 128
+        self.hidden_unit = 50
         self.save_path = "./save/lstm/"
         self.model_name = "LSTM-Model"
-        self.dict_file = "./dict/dict_500.dict"
+        self.dict_file = "./dict/dict_30000.dict"
         self.corpus_file = "./data/split_valid.json"
         self.vector_file = "./dict/vector/wiki.zh.small.text.vector"
-        self.vocab_size = 500
+        self.vocab_size = 30000
         self.max_batch = 1001
-        self.save_step = 200
-        self.batch_size = 5
+        self.save_step = 50
+        self.batch_size = 400
         self.max_generate_len = 10
-
         self.is_beams = True
         self.beam_size = 3
-
         self.is_sample = True
-
         self.is_pretrained = True
+        self.learning_rate = 0.05
 
 class Model(object):
 
@@ -36,6 +35,8 @@ class Model(object):
 
         #self.vocab_to_idx = config.vocab_to_idx
         #self.idx_to_vocab = config.idx_to_vocab
+
+        self.loss_tracker = LossTracker()
 
         self.save_path = config.save_path
         self.model_name = config.model_name
@@ -51,11 +52,6 @@ class Model(object):
         self.corpus_file = config.corpus_file
 
         self.is_pretrained = config.is_pretrained
-
-        self.idx_start = 0 # 0
-        self.idx_eos = 1 # 1
-        self.idx_pad = 2 # 2
-        self.idx_unk = 3 # 3
 
         self.vocab_size = vocab_size = config.vocab_size
         self.embedding_size = embedding_size = config.embedding_size
@@ -111,7 +107,7 @@ class Model(object):
         )
 
         self.loss = tf.reduce_mean(stepwise_cross_entropy)
-        self.train_op = tf.train.AdamOptimizer().minimize(self.loss)
+        self.train_op = tf.train.AdamOptimizer(learning_rate=config.learning_rate).minimize(self.loss)
 
     def variables_init(self, sess):
         sess.run(tf.global_variables_initializer())
@@ -127,6 +123,11 @@ class Model(object):
         else:
             self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
 
+        self.idx_start = self.vocab_to_idx[TOKEN_BOS]
+        self.idx_eos = self.vocab_to_idx[TOKEN_EOS]
+        self.idx_pad = self.vocab_to_idx[TOKEN_PAD]
+        self.idx_unk = self.vocab_to_idx[TOKEN_UNK]
+
     def train(self, sess):
         loss_track = []
         for batch in range(self.max_batch):
@@ -138,8 +139,11 @@ class Model(object):
                 print('batch {}'.format(batch))
                 print('  minibatch loss: {}'.format(sess.run(self.loss, fd)))
                 predict_ = sess.run(self.decoder_prediction, fd)
-                self.__print_result(fd[self.decoder_targets], predict_)
+                self.__print_result(fd[self.encoder_inputs], fd[self.decoder_targets], predict_)
                 self.save(sess, batch)
+
+                self.loss_tracker.add(np.mean(loss_track))
+                loss_track = []
 
     def next_feed(self):
         [r_q, r_a, r_qe, r_ae] = next(self.batcher)
@@ -232,9 +236,13 @@ class Model(object):
 
             return response
 
-    def __print_result(self, tar, pred):
-        for i, (target, pred) in enumerate(zip(tar.T, pred.T)):
+    def __print_result(self, inp, tar, pred):
+        for i, (inp, target, pred) in enumerate(zip(inp.T, tar.T, pred.T)):
             print('  sample {}:'.format(i+1))
+            str_inp = ""
+            for j in inp: str_inp += self.idx_to_vocab[j]
+            print('    input      > ')
+            print(str_inp)
             str_tar = ""
             for j in target: str_tar += self.idx_to_vocab[j]
             print('    target     > ')

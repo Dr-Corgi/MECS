@@ -1,6 +1,8 @@
 # -*- coding:utf8 -*-
 import json
 import codecs
+from conf.profile import TOKEN_UNK, TOKEN_EOS, TOKEN_BOS, TOKEN_PAD
+import numpy as np
 
 def build_dict(file_name, dict_path, vocab_size=30000, encoding='utf8'):
 
@@ -58,3 +60,51 @@ def load_dict(dict_name, encoding='utf8'):
             idx_to_word[len(idx_to_word)] = word
 
     return word_to_idx, idx_to_word
+
+def loadPretrainedVector(vocab_size, embedding_size, pretrain_file):
+    vocab_to_idx = {}
+    idx_to_vocab = {}
+    vocab_embed = []
+    with open(pretrain_file, encoding='utf8') as fin:
+        line_0 = fin.readline().strip().split(" ")
+        assert int(line_0[0]) >= vocab_size
+        assert int(line_0[1]) == embedding_size
+
+        # pad
+        #vec = [0.0 for i in range(embedding_size)]
+        vec = list(np.random.uniform(10.0, -10.0, [embedding_size]))
+        vocab_to_idx[TOKEN_PAD] = len(vocab_to_idx)
+        idx_to_vocab[len(idx_to_vocab)] = TOKEN_PAD
+        vocab_embed.append(vec)
+
+        # start & end
+        vec = list(np.random.uniform(10.0, -10.0, [embedding_size]))
+        vocab_to_idx[TOKEN_BOS] = len(vocab_to_idx)
+        idx_to_vocab[len(idx_to_vocab)] = TOKEN_BOS
+        vocab_embed.append(vec)
+
+        vec = list(np.random.uniform(10.0, -10.0, [embedding_size]))
+        vocab_to_idx[TOKEN_EOS] = len(vocab_to_idx)
+        idx_to_vocab[len(idx_to_vocab)] = TOKEN_EOS
+        vocab_embed.append(vec)
+
+        # unk
+        vec = list(np.random.uniform(10.0, -10.0, [embedding_size]))
+        #vec = list(2 * np.mean(vocab_embed, axis=0))
+        vocab_to_idx[TOKEN_UNK] = len(vocab_to_idx)
+        idx_to_vocab[len(idx_to_vocab)] = TOKEN_UNK
+        vocab_embed.append(vec)
+
+
+        # words
+        for i in range(vocab_size - 4):
+            line_ = fin.readline().strip().split(" ")
+
+            voc = line_[0]
+            #print(type(voc))
+            vec = [float(n) for n in line_[1:]]
+            vocab_to_idx[voc] = len(vocab_to_idx)
+            idx_to_vocab[len(idx_to_vocab)] = voc
+            vocab_embed.append(vec)
+
+    return vocab_to_idx, idx_to_vocab, np.asarray(vocab_embed)
