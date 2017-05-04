@@ -1,13 +1,15 @@
 # -*- coding:utf8 -*-
-import tensorflow as tf
-from tensorflow.contrib.rnn import LSTMCell, LSTMStateTuple
-from tensorflow.contrib.layers import linear
-from util.dictutil import load_dict,load_pretrained_vector
-from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
-from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
-from model.blstm_atten.custom_cell import CustomCell
+import tensorflow as tf
+from tensorflow.contrib.layers import linear
+from tensorflow.contrib.rnn import LSTMCell, LSTMStateTuple
+
+from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
+from legacy_models.model.blstm_atten.custom_cell import CustomCell
+from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
+from util.dictutil import load_dict, load_pretrained_vector
 from util.trackutil import LossTracker
+
 
 # Configuration
 class Config(object):

@@ -1,7 +1,7 @@
 # -*- coding:utf8 -*-
-from model.lstm.model import Config, Model
 import tensorflow as tf
-from util.dictutil import load_pretrained_vector
+
+from legacy_models.model.lstm.model import Config, Model
 
 # 对训练数据进行切割
 # splitData()
