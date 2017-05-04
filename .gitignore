@@ -1,16 +1,11 @@
 .idea/*
 .DS_Store
-*/.DS_Store
 data/*
-*/__init__.py
+__init__.py
 save/lstm/*
 save/blstm/*
 save/blstma/*
 *.pyc
-*/*.pyc
 backup/*
-model/lstm/__init__.py
-model/blstm/__init__.py
-model/blstm_atten/__init__.py
 test/*
 dict/vector/*
