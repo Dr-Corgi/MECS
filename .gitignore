@@ -10,3 +10,6 @@ backup/*
 test/*
 dict/vector/*
 legacy_models/*
+tf_chatbot/data/*
+tf_chatbot/nn_models/*
+tf_chatbot/results/*
