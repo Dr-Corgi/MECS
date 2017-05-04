@@ -9,3 +9,4 @@ save/blstma/*
 backup/*
 test/*
 dict/vector/*
+legacy_models/*
