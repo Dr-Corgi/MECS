@@ -1,8 +1,10 @@
 # -*- coding:utf8 -*-
 import json
-from numpy.random import shuffle
-from conf.profile import TOKEN_UNK, TOKEN_EOS, TOKEN_BOS, TOKEN_PAD
+
 import numpy as np
+from numpy.random import shuffle
+
+from legacy_models.conf.profile import TOKEN_UNK, TOKEN_EOS
 
 
 # 读取语料,返回语料列表,格式为[[Q1, EQ1, A1, EA1],...]

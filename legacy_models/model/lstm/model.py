@@ -4,10 +4,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 from tensorflow.contrib.rnn import LSTMCell
 from tensorflow.contrib.layers import linear
-from util.dictutil import load_dict, load_pretrained_vector
-from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
-from util.trackutil import LossTracker
-from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
+from legacy_models.util.dictutil import load_dict, load_pretrained_vector
+from legacy_models.util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
+from legacy_models.util.trackutil import LossTracker
+from legacy_models.conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
 
 # Configuration

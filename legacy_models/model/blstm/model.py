@@ -1,11 +1,12 @@
 # -*- coding:utf8 -*-
-import tensorflow as tf
-from tensorflow.contrib.rnn import LSTMCell, LSTMStateTuple
-from tensorflow.contrib.layers import linear
-from util.dictutil import load_dict
-from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
-from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 import numpy as np
+import tensorflow as tf
+from tensorflow.contrib.layers import linear
+from tensorflow.contrib.rnn import LSTMCell, LSTMStateTuple
+from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
+from util.dictutil import load_dict
+
+from legacy_models.conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
 
 
 # Configuration

@@ -1,8 +1,11 @@
 # -*- coding:utf8 -*-
-import json
 import codecs
-from conf.profile import TOKEN_UNK, TOKEN_EOS, TOKEN_BOS, TOKEN_PAD
+import json
+
 import numpy as np
+
+from legacy_models.conf.profile import TOKEN_UNK, TOKEN_EOS, TOKEN_BOS, TOKEN_PAD
+
 
 def build_dict(file_name, dict_path, vocab_size=30000, encoding='utf8'):
 
