@@ -1,8 +1,10 @@
 # -*- coding:utf8 -*-
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 from tensorflow.contrib.rnn import LSTMCell
 from tensorflow.contrib.layers import linear
-from util.dictutil import load_dict, loadPretrainedVector
+from util.dictutil import load_dict, load_pretrained_vector
 from util.datautil import batch_generator, load_corpus, batch_op, seq_index, dinput_op
 from util.trackutil import LossTracker
 from conf.profile import TOKEN_EOS, TOKEN_PAD, TOKEN_BOS, TOKEN_UNK
@@ -11,23 +13,23 @@ import numpy as np
 # Configuration
 class Config(object):
     def __init__(self):
-        self.embedding_size = 50
-        self.hidden_unit = 50
+        self.embedding_size = 64
+        self.hidden_unit = 64
         self.save_path = "./save/lstm/"
         self.model_name = "LSTM-Model"
         self.dict_file = "./dict/dict_30000.dict"
-        self.corpus_file = "./data/split_valid.json"
-        self.vector_file = "./dict/vector/wiki.zh.small.text.vector"
-        self.vocab_size = 30000
-        self.max_batch = 1001
-        self.save_step = 50
-        self.batch_size = 400
+        self.corpus_file = "./data/split_train.json"
+        self.vector_file = "./dict/vector/zh.wiki.vector"
+        self.vocab_size = 29342
+        self.max_batch = 400000
+        self.save_step = 4000
+        self.batch_size = 256
         self.max_generate_len = 10
         self.is_beams = True
         self.beam_size = 3
         self.is_sample = True
         self.is_pretrained = True
-        self.learning_rate = 0.05
+        self.learning_rate = 0.02
 
 class Model(object):
 
@@ -109,6 +111,9 @@ class Model(object):
         self.loss = tf.reduce_mean(stepwise_cross_entropy)
         self.train_op = tf.train.AdamOptimizer(learning_rate=config.learning_rate).minimize(self.loss)
 
+        #self.train_op = tf.train.AdagradOptimizer(learning_rate=config.learning_rate).minimize(self.loss)
+        #self.train_op = tf.train.AdadeltaOptimizer(learning_rate=config.learning_rate).minimize(self.loss)
+
     def variables_init(self, sess):
         sess.run(tf.global_variables_initializer())
         self.dict_init(sess)
@@ -118,7 +123,7 @@ class Model(object):
 
     def dict_init(self, sess):
         if self.is_pretrained:
-            self.vocab_to_idx, self.idx_to_vocab, vocab_emb = loadPretrainedVector(self.vocab_size, self.embedding_size, self.vector_file)
+            self.vocab_to_idx, self.idx_to_vocab, vocab_emb = load_pretrained_vector(self.vocab_size, self.embedding_size, self.vector_file)
             sess.run(self.embedding_init, feed_dict={self.embeddings_placeholder: vocab_emb})
         else:
             self.vocab_to_idx, self.idx_to_vocab = load_dict(self.dict_file)
@@ -134,6 +139,9 @@ class Model(object):
             fd = self.next_feed()
             _, l = sess.run([self.train_op, self.loss], fd)
             loss_track.append(l)
+
+            if batch % 200 == 0 and batch != 0:
+                print('========== batch {}'.format(batch)+": "+str(np.mean(loss_track))+" ==========")
 
             if batch % self.save_step == 0 and batch != 0:
                 print('batch {}'.format(batch))

@@ -61,7 +61,7 @@ def load_dict(dict_name, encoding='utf8'):
 
     return word_to_idx, idx_to_word
 
-def loadPretrainedVector(vocab_size, embedding_size, pretrain_file):
+def load_pretrained_vector(vocab_size, embedding_size, pretrain_file):
     vocab_to_idx = {}
     idx_to_vocab = {}
     vocab_embed = []

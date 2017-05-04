@@ -1,19 +1,20 @@
 # -*- coding:utf8 -*-
 from model.lstm.model import Config, Model
 import tensorflow as tf
-from util.dictutil import loadPretrainedVector
+from util.dictutil import load_pretrained_vector
 
 # 对训练数据进行切割
 # splitData()
 
 
 config = Config()
-config.is_pretrained = False
+#config.is_pretrained = False
 model = Model(config)
 sess = tf.Session()
 model.variables_init(sess)
+model.restore(sess, 24000)
 model.train(sess)
-model.loss_tracker.savefig(50, config.save_path)
+model.loss_tracker.savefig(config.save_path)
 
 resonse = model.generate(sess, "我 对此 感到 非常 开心")
 print(resonse)
