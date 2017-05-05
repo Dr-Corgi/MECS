@@ -5,6 +5,7 @@ from __future__ import print_function
 import os
 import re
 import sys
+import json
 
 from tensorflow.python.platform import gfile
 
@@ -25,11 +26,13 @@ UNK_ID = 3
 _WORD_SPLIT = re.compile("([.,!?\"':;)(])")
 _DIGIT_RE = re.compile(r"\d{3,}")
 
+_ENCODING = "utf8"
+
 def get_dialog_train_set_path(path):
-    return os.path.join(path, 'chat')
+    return os.path.join(path, 'train_data')
 
 def get_dialog_dev_set_path(path):
-    return os.path.join(path, 'chat_test')
+    return os.path.join(path, 'dev_data')
 
 def basic_tokenizer(sentence):
     words = []
@@ -37,8 +40,8 @@ def basic_tokenizer(sentence):
         words.extend(re.split(_WORD_SPLIT, space_separated_fragment))
     return [w.lower() for w in words if w]
 
-def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
-                      tokenizer=None, normalize_digits=None):
+def create_vocabulary_bak(vocabulary_path, data_path, max_vocabulary_size,
+                      tokenizer=None, normalize_digits=True):
     if not gfile.Exists(vocabulary_path):
         print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path))
         vocab = {}
@@ -62,6 +65,42 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
                 for w in vocab_list:
                     vocab_file.write(w + '\n')
 
+def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
+                            tokenizer=None, normalize_digits=True):
+    if not gfile.Exists(vocabulary_path):
+        print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path))
+        vocab = {}
+        data = json.load(open(data_path, encoding=_ENCODING))
+        counter = 0
+        for ((q,qe),(a,ae)) in data:
+            counter += 1
+            if counter % 50000 == 0:
+                print("  Create_vocabulary: processing line %d" % counter)
+
+            tokens_q = tokenizer(q) if tokenizer else basic_tokenizer(q)
+            for tok in tokens_q:
+                word = re.sub(_DIGIT_RE, "0", tok) if normalize_digits else tok
+                if word in vocab:
+                    vocab[word] += 1
+                else:
+                    vocab[word] = 1
+
+            tokens_a = tokenizer(a) if tokenizer else basic_tokenizer(a)
+            for tok in tokens_a:
+                word = re.sub(_DIGIT_RE, "0", tok) if normalize_digits else tok
+                if word in vocab:
+                    vocab[word] += 1
+                else:
+                    vocab[word] = 1
+
+        vocab_list = _START_VOCAB + sorted(vocab, key=vocab.get, reverse=True)
+        if len(vocab_list) > max_vocabulary_size:
+            vocab_list = vocab_list[:max_vocabulary_size]
+        with gfile.GFile(vocabulary_path, mode='w') as vocab_file:
+            for w in vocab_list:
+                vocab_file.write(w + '\n')
+
+
 def initialize_vocabulary(vocabulary_path):
 
     if gfile.Exists(vocabulary_path):
@@ -83,11 +122,10 @@ def sentence_to_token_ids(sentence, vocabulary,
     else:
         words = basic_tokenizer(sentence)
     if not normalize_digits:
-        return [vocabulary.get(w, _UNK) for w in words]
-        #return [vocabulary.get(w, UNK_ID) for w in words]
-    return [vocabulary.get(re.sub(_DIGIT_RE, "0", w), _UNK) for w in words]
+        return [vocabulary.get(w, UNK_ID) for w in words]
+    return [vocabulary.get(re.sub(_DIGIT_RE, "0", w), UNK_ID) for w in words]
 
-def data_to_token_ids(data_path, target_path, vocabulary_path,
+def data_to_token_ids_bak(data_path, target_path, vocabulary_path,
                       tokenizer=None, normalize_digits=True):
     if not gfile.Exists(target_path):
         print("Tokenizing data in %s" % data_path)
@@ -103,18 +141,35 @@ def data_to_token_ids(data_path, target_path, vocabulary_path,
                                                       normalize_digits)
                     tokens_file.write(" ".join([str(tok) for tok in token_ids]) + '\n')
 
+def data_to_token_ids(data_path, target_path, vocabulary_path,
+                            tokenizer=None, normalize_digits=True):
+    if not gfile.Exists(target_path):
+        print("Tokenizing data in %s" % data_path)
+        vocab, _ = initialize_vocabulary(vocabulary_path)
+        with gfile.GFile(target_path, mode='w') as tokens_file:
+            data = json.load(open(data_path, encoding=_ENCODING))
+            counter = 0
+            for ((q,qe),(a,ae)) in data:
+                counter += 1
+                if counter % 50000 == 0:
+                    print("  Data_to_token_ids: tokenizing line %d" % counter)
+                token_ids_q = sentence_to_token_ids(q, vocab, tokenizer, normalize_digits)
+                tokens_file.write(" ".join([str(tok) for tok in token_ids_q]) + '\n')
+                token_ids_a = sentence_to_token_ids(a, vocab, tokenizer, normalize_digits)
+                tokens_file.write(" ".join([str(tok) for tok in token_ids_a]) + '\n')
+
 def prepare_dialog_data(data_dir, vocabulary_size):
     train_path = get_dialog_train_set_path(data_dir)
     dev_path = get_dialog_dev_set_path(data_dir)
 
     vocab_path = os.path.join(data_dir, "vocab%d.in" % vocabulary_size)
-    create_vocabulary(vocab_path, train_path+".in", vocabulary_size)
+    create_vocabulary(vocab_path, train_path+".json", vocabulary_size)
 
     train_ids_path = train_path + (".ids%d.in" % vocabulary_size)
-    data_to_token_ids(train_path + ".in", train_ids_path, vocab_path)
+    data_to_token_ids(train_path + ".json", train_ids_path, vocab_path)
 
     dev_ids_path = dev_path + (".ids%d.in" % vocabulary_size)
-    data_to_token_ids(dev_path + ".in", dev_ids_path, vocab_path)
+    data_to_token_ids(dev_path + ".json", dev_ids_path, vocab_path)
 
     return (train_ids_path, dev_ids_path, vocab_path)
 
@@ -141,3 +196,4 @@ def read_data(tokenized_dialog_path, max_size=None):
                     break
             source, target = fh.readline(), fh.readline()
     return data_set
+

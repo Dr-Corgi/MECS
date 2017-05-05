@@ -22,11 +22,11 @@ def train():
         print ("Reading development and training data (limit:%d)." % FLAGS.max_train_data_size)
         dev_set = read_data(dev_data)
         train_set = read_data(train_data, FLAGS.max_train_data_size)
-        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(BUCKETS))]
+        train_bucket_sizes = [len(train_set[b]) for b in range(len(BUCKETS))]
         train_total_size = float(sum(train_bucket_sizes))
 
         train_buckets_scale = [sum(train_bucket_sizes[:i+1]) / train_total_size
-                               for i in xrange(len(train_bucket_sizes))]
+                               for i in range(len(train_bucket_sizes))]
 
         step_time, loss = 0.0, 0.0
         current_step = 0
@@ -34,7 +34,7 @@ def train():
 
         while True:
             random_number_01 = np.random.random_sample()
-            bucket_id = min([i for i in xrange(len(train_buckets_scale))
+            bucket_id = min([i for i in range(len(train_buckets_scale))
                              if train_buckets_scale[i] > random_number_01])
 
             start_time = time.time()
@@ -62,7 +62,7 @@ def train():
                 model.saver.save(sess, checkpoint_path, global_step=model.global_step)
                 step_time, loss = 0.0, 0.0
 
-                for bucket_id in xrange(len(BUCKETS)):
+                for bucket_id in range(len(BUCKETS)):
                     encoder_inputs, decoder_inputs, target_weights = model.get_batch(dev_set, bucket_id)
                     _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
 

@@ -101,7 +101,7 @@ def dinput_op(inputs, pad_idx, start_idx, max_sequence_length=None):
 
 def splitData(test_size = 100000,
               validation_size = 10000,
-              source_fn="./data/train_data.json",
+              source_fn="./data/dev_data.json",
               train_fn="./data/split_train.json",
               test_fn="./data/split_test.json",
               valid_fn="./data/split_valid.json"):
