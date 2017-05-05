@@ -13,10 +13,6 @@ def predict():
         test_sentences = [q for ((q,qe),_) in data]
         return test_sentences
 
-        #with open(TEST_DATASET_PATH) as test_fh:
-        #    test_sentences = [s.strip() for s in test_fh.readlines()]
-        #return test_sentences
-
     results_filename = '_'.join(['results', str(FLAGS.num_layers), str(FLAGS.size), str(FLAGS.vocab_size)])
     results_path = os.path.join(FLAGS.results_dir, results_filename)
 
