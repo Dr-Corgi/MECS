@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-TEST_DATASET_PATH = './tf_chatbot/data/test/test_data.json'
+TEST_DATASET_PATH = './tf_chatbot/data/test/test_set.txt'
 SAVE_DATA_DIR = './tf_chatbot/'
 
 tf.app.flags.DEFINE_string('data_dir', SAVE_DATA_DIR+'data', 'Data directory')
