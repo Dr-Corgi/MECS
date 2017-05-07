@@ -9,7 +9,7 @@ from legacy_models.conf.profile import TOKEN_UNK, TOKEN_EOS
 
 # 读取语料,返回语料列表,格式为[[Q1, EQ1, A1, EA1],...]
 def load_corpus(corpus_name, encoding='utf8'):
-    return json.load(open(corpus_name, encoding=encoding))
+    return json.load(open(corpus_name))
 
 
 # 根据语料和词典生成训练batch
