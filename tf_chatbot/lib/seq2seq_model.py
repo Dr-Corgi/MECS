@@ -8,10 +8,8 @@ import numpy as np
 # from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
-from tf_chatbot.lib.basic.seq2seq_sample import embedding_attention_seq2seq
-
 import tf_chatbot.lib.data_utils as data_utils
-#from tensorflow.contrib.legacy_seq2seq import embedding_attention_seq2seq
+from tensorflow.contrib.legacy_seq2seq import model_with_buckets, embedding_attention_seq2seq
 from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell
 
 class Seq2SeqModel(object):
@@ -146,7 +144,7 @@ class Seq2SeqModel(object):
 
         # Training outputs and losses.
         if forward_only:
-            self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(
+            self.outputs, self.losses = model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True),
                 softmax_loss_function=softmax_loss_function)
