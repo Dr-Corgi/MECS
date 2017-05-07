@@ -9,7 +9,8 @@ import numpy as np
 import tensorflow as tf
 
 import tf_chatbot.lib.data_utils as data_utils
-
+from tensorflow.contrib.legacy_seq2seq import model_with_buckets, embedding_attention_seq2seq
+from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell
 
 class Seq2SeqModel(object):
     """Sequence-to-sequence model with attention and for multiple buckets.
@@ -102,18 +103,18 @@ class Seq2SeqModel(object):
 
         # Create the internal multi-layer cell for our RNN.
         def single_cell():
-            return tf.contrib.rnn.GRUCell(size)
+            return GRUCell(size)
 
         if use_lstm:
             def single_cell():
-                return tf.contrib.rnn.BasicLSTMCell(size)
+                return BasicLSTMCell(size)
         cell = single_cell()
         if num_layers > 1:
-            cell = tf.contrib.rnn.MultiRNNCell([single_cell() for _ in range(num_layers)])
+            cell = MultiRNNCell([single_cell() for _ in range(num_layers)])
 
         # The seq2seq function: we use embedding for the input and attention.
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
-            return tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
+            return embedding_attention_seq2seq(
                 encoder_inputs,
                 decoder_inputs,
                 cell,
@@ -143,7 +144,7 @@ class Seq2SeqModel(object):
 
         # Training outputs and losses.
         if forward_only:
-            self.outputs, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(
+            self.outputs, self.losses = model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True),
                 softmax_loss_function=softmax_loss_function)
