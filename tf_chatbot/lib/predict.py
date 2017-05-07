@@ -10,7 +10,7 @@ import json
 def predict():
     def _get_test_dataset():
         data = json.load(open(TEST_DATASET_PATH, encoding=data_utils._ENCODING))
-        test_sentences = [q for ((q,qe),_) in data]
+        test_sentences = [q for ((q, qe), _) in data]
         return test_sentences
 
     results_filename = '_'.join(['results', str(FLAGS.num_layers), str(FLAGS.size), str(FLAGS.vocab_size)])

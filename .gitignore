@@ -6,10 +6,11 @@ save/lstm/*
 save/blstm/*
 save/blstma/*
 *.pyc
-backup/*
+legacy_models/backup/*
 test/*
 dict/vector/*
-legacy_models/*
+legacy_models/*/*
 tf_chatbot/data/*
 tf_chatbot/nn_models/*
 tf_chatbot/results/*
+tf_chatbot/configs/*
