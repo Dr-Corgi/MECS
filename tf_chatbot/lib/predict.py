@@ -5,13 +5,16 @@ import tensorflow as tf
 from tf_chatbot.configs.config import TEST_DATASET_PATH, FLAGS
 from tf_chatbot.lib import data_utils
 from tf_chatbot.lib.seq2seq_model_utils import create_model, get_predicted_sentence
-
+import json
 
 def predict():
     def _get_test_dataset():
-        with open(TEST_DATASET_PATH) as test_fh:
-            test_sentences = [s.strip() for s in test_fh.readlines()]
+        data = json.load(open(TEST_DATASET_PATH, encoding=data_utils._ENCODING))
+        test_sentences = [q for ((q, qe), _) in data]
         return test_sentences
+        #with open(TEST_DATASET_PATH) as test_fh:
+        #    test_sentences = [s.strip() for s in test_fh.readlines()]
+        #return test_sentences
 
     results_filename = '_'.join(['results', str(FLAGS.num_layers), str(FLAGS.size), str(FLAGS.vocab_size)])
     results_path = os.path.join(FLAGS.results_dir, results_filename)

@@ -10,6 +10,7 @@ import tensorflow as tf
 
 import tf_chatbot.lib.data_utils as data_utils
 from tensorflow.contrib.legacy_seq2seq import model_with_buckets, embedding_attention_seq2seq
+from tf_chatbot.lib.basic.advanced_seq2seq import embedding_attention_sampled_seq2seq
 from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell
 
 class Seq2SeqModel(object):
@@ -114,7 +115,7 @@ class Seq2SeqModel(object):
 
         # The seq2seq function: we use embedding for the input and attention.
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
-            return embedding_attention_seq2seq(
+            return embedding_attention_sampled_seq2seq(
                 encoder_inputs,
                 decoder_inputs,
                 cell,
