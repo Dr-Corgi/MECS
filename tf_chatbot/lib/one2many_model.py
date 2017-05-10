@@ -15,6 +15,7 @@ import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell
 #from tensorflow.contrib.legacy_seq2seq import one2many_rnn_seq2seq
 from tf_chatbot.lib import data_utils
+from tf_chatbot.configs.config import EMOTION_TYPE
 
 class One2ManyModel(object):
 
@@ -70,7 +71,7 @@ class One2ManyModel(object):
                         num_classes=self.target_vocab_size),
                     dtype)
 
-        softmax_loss_function = sampled_loss
+            softmax_loss_function = sampled_loss
 
         def single_cell():
             return GRUCell(size)
@@ -97,13 +98,13 @@ class One2ManyModel(object):
 
         # Feeds for inputs
         self.encoder_inputs = []
-        self.decoder_inputs_dict = {0:[],1:[],2:[],3:[],4:[],5:[]}
-        self.target_weights = {0:[],1:[],2:[],3:[],4:[],5:[]}
+        self.decoder_inputs_dict = data_utils.DICT_LIST(EMOTION_TYPE)
+        self.target_weights = data_utils.DICT_LIST(EMOTION_TYPE)
 
         for i in range(buckets[-1][0]):
             self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
                                                       name="encoder{0}".format(i)))
-        for j in range(6): # six emotion types
+        for j in range(len(EMOTION_TYPE)): # six emotion types
             for i in range(buckets[-1][1] + 1):
                 self.decoder_inputs_dict[j].append(tf.placeholder(tf.int32, shape=[None],
                                                                   name="decoder{0}_{1}".format(i,j)))
@@ -111,8 +112,8 @@ class One2ManyModel(object):
                                                              name="weight{0}_{1}".format(i,j)))
 
         # targets are decoder inputs shifted by one
-        targets = {0:[],1:[],2:[],3:[],4:[],5:[]}
-        for j in range(6):
+        targets = data_utils.DICT_LIST(EMOTION_TYPE)
+        for j in range(len(EMOTION_TYPE)):
             targets[j] = [self.decoder_inputs_dict[j][i+1]
                           for i in range(len(self.decoder_inputs_dict[j])-1)]
 
@@ -123,7 +124,7 @@ class One2ManyModel(object):
                 softmax_loss_function=softmax_loss_function)
             if output_projection is not None:
                 for b in range(len(buckets)):
-                    for j in range(6):
+                    for j in range(len(EMOTION_TYPE)):
                         self.outputs[j][b] = [
                             tf.matmul(output, output_projection[0]) + output_projection[1]
                             for output in self.outputs[j][b]]
@@ -137,11 +138,11 @@ class One2ManyModel(object):
 
         params = tf.trainable_variables()
         if not forward_only:
-            self.gradient_norms = {0:[],1:[],2:[],3:[],4:[],5:[]}
-            self.updates = {0:[],1:[],2:[],3:[],4:[],5:[]}
+            self.gradient_norms = data_utils.DICT_LIST(EMOTION_TYPE)
+            self.updates = data_utils.DICT_LIST(EMOTION_TYPE)
             opt = tf.train.GradientDescentOptimizer(self.learning_rate)
             for b in range(len(buckets)):
-                for j in range(6):
+                for j in range(len(EMOTION_TYPE)):
                     gradients = tf.gradients(self.losses[j][b], params)
                     clipped_gradients, norm = tf.clip_by_global_norm(gradients,
                                                                      max_gradient_norm)
@@ -158,7 +159,7 @@ class One2ManyModel(object):
     def get_batch(self, data, bucket_id):
         encoder_size, decoder_size = self.buckets[bucket_id]
         encoder_inputs = []
-        decoder_inputs = {0:[],1:[],2:[],3:[],4:[],5:[]}
+        decoder_inputs = data_utils.DICT_LIST(EMOTION_TYPE)
 
         for _ in range(self.batch_size):
             encoder_input, decoder_input = random.choice(data[bucket_id])
@@ -166,21 +167,21 @@ class One2ManyModel(object):
             encoder_pad = [data_utils.PAD_ID] * (encoder_size - len(encoder_input))
             encoder_inputs.append(list(reversed(encoder_input + encoder_pad)))
 
-            for i in range(6):
+            for i in range(len(EMOTION_TYPE)):
                 decoder_pad_size = decoder_size - len(decoder_input[i]) - 1
                 decoder_inputs[i].append([data_utils.GO_ID] + decoder_input[i] +
                                          [data_utils.PAD_ID] * decoder_pad_size)
 
         batch_encoder_inputs = []
-        batch_decoder_inputs = {0:[],1:[],2:[],3:[],4:[],5:[]}
-        batch_weights = {0:[],1:[],2:[],3:[],4:[],5:[]}
+        batch_decoder_inputs = data_utils.DICT_LIST(EMOTION_TYPE)
+        batch_weights = data_utils.DICT_LIST(EMOTION_TYPE)
 
         for length_idx in range(encoder_size):
             batch_encoder_inputs.append(
                 np.array([encoder_inputs[batch_idx][length_idx]
                           for batch_idx in range(self.batch_size)],dtype=np.int32))
 
-        for j in range(6):
+        for j in range(len(EMOTION_TYPE)):
             for length_idx in range(decoder_size):
                 batch_decoder_inputs[j].append(
                     np.array([decoder_inputs[j][batch_idx][length_idx]
@@ -202,7 +203,7 @@ class One2ManyModel(object):
         if len(encoder_inputs) != encoder_size:
             raise ValueError("Encoder length must be equal to the one in bucket,"
                              " %d != %d." % (len(encoder_inputs), encoder_size))
-        for j in range(6):
+        for j in range(len(EMOTION_TYPE)):
             if len(decoder_inputs_dict[j]) != decoder_size:
                 raise ValueError("Decoder[%d] length must be equal to the one in bucket,"
                                  " %d != %d." % (j, len(decoder_inputs_dict[j]), decoder_size))
@@ -213,7 +214,7 @@ class One2ManyModel(object):
         input_feed = {}
         for l in range(encoder_size):
             input_feed[self.encoder_inputs[l].name] = encoder_inputs[l]
-        for j in range(6):
+        for j in range(len(EMOTION_TYPE)):
             for l in range(decoder_size):
                 input_feed[self.decoder_inputs_dict[j][l].name] = decoder_inputs_dict[j][l]
                 input_feed[self.target_weights[j][l].name] = target_weights_dict[j][l]
@@ -222,15 +223,15 @@ class One2ManyModel(object):
             input_feed[last_target] = np.zeros([self.batch_size], dtype=np.int32)
 
         if not forward_only:
-            updates_feed = {j:self.updates[j][bucket_id] for j in range(6)}
-            gnorm_feed = {j:self.gradient_norms[j][bucket_id] for j in range(6)}
-            loss_feed = {j:self.losses[j][bucket_id] for j in range(6)}
+            updates_feed = {j:self.updates[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+            gnorm_feed = {j:self.gradient_norms[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+            loss_feed = {j:self.losses[j][bucket_id] for j in range(len(EMOTION_TYPE))}
             output_feed = [updates_feed,
                            gnorm_feed,
                            loss_feed]
         else:
-            loss_feed = {j:self.losses[j][bucket_id] for j in range(6)}
-            pred_feed = {j:self.outputs[j][bucket_id] for j in range(6)}
+            loss_feed = {j:self.losses[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+            pred_feed = {j:self.outputs[j][bucket_id] for j in range(len(EMOTION_TYPE))}
             output_feed = [loss_feed, pred_feed]
 
         outputs = session.run(output_feed, input_feed)
@@ -254,39 +255,37 @@ def model_with_buckets(encoder_inputs,
   if len(encoder_inputs) < buckets[-1][0]:
     raise ValueError("Length of encoder_inputs (%d) must be at least that of la"
                      "st bucket (%d)." % (len(encoder_inputs), buckets[-1][0]))
-  for j in range(6):
+  for j in range(len(EMOTION_TYPE)):
       if len(targets[j]) < buckets[-1][1]:
         raise ValueError("Length of targets[%d] (%d) must be at least that of last"
                          "bucket (%d)." % (j, len(targets[j]), buckets[-1][1]))
-  for j in range(6):
       if len(weights[j]) < buckets[-1][1]:
         raise ValueError("Length of weights[%d] (%d) must be at least that of last"
                          "bucket (%d)." % (j, len(weights[j]), buckets[-1][1]))
-
   all_decoder_inputs = []
   all_targets = []
   all_weights = []
-  for i in range(6):
+  for i in range(len(EMOTION_TYPE)):
       all_decoder_inputs.append(decoder_inputs[i])
       all_targets.append(targets[i])
       all_weights.append(weights[i])
   #all_inputs = encoder_inputs + decoder_inputs + targets + weights
   all_inputs = encoder_inputs + all_decoder_inputs + all_targets + all_weights
-  losses = {0:[],1:[],2:[],3:[],4:[],5:[]}
-  outputs = {0:[],1:[],2:[],3:[],4:[],5:[]}
+  losses = data_utils.DICT_LIST(EMOTION_TYPE)
+  outputs = data_utils.DICT_LIST(EMOTION_TYPE)
   with ops.name_scope(name, "model_with_buckets", all_inputs):
     for j, bucket in enumerate(buckets):
       with variable_scope.variable_scope(
           variable_scope.get_variable_scope(), reuse=True if j > 0 else None):
         cut_decoder_inputs = {}
-        for i in range(6):
+        for i in range(len(EMOTION_TYPE)):
             cut_decoder_inputs[i] = decoder_inputs[i][:bucket[1]]
         bucket_outputs, _ = seq2seq(encoder_inputs[:bucket[0]],
                                     cut_decoder_inputs)
        # outputs.append(bucket_outputs)
-        for i in range(6):
+        for i in range(len(EMOTION_TYPE)):
             outputs[i].append(bucket_outputs[i])
-        for i in range(6):
+        for i in range(len(EMOTION_TYPE)):
             if per_example_loss:
               losses[i].append(
                   sequence_loss_by_example(

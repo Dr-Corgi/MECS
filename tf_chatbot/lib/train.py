@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 from tf_chatbot.lib.seq2seq_model_utils import create_model, create_model_one2many
-from tf_chatbot.configs.config import FLAGS, BUCKETS
+from tf_chatbot.configs.config import FLAGS, BUCKETS, EMOTION_TYPE
 from tf_chatbot.lib.data_utils import read_data, read_data_one2many
 from tf_chatbot.lib import data_utils
 
@@ -45,7 +45,12 @@ def train_one2many():
                                          target_weights_dict, bucket_id, forward_only=False)
 
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
-            loss += sum([l for _,l in step_loss.items()]) / FLAGS.steps_per_checkpoint
+            #print("===== Step: %d =====" % model.global_step.eval())
+            #for index, l in step_loss.items():
+            #    print("Emotion %d loss %.4f perplexity %.4f" % (index, l, math.exp(l)))
+            #print(sum([l for _,l in step_loss.items()]))
+            #print(sum([l for _,l in step_loss.items()])/6)
+            loss += np.mean([l for _,l in step_loss.items()]) / FLAGS.steps_per_checkpoint
             current_step += 1
 
             if current_step % FLAGS.steps_per_checkpoint == 0:
@@ -67,8 +72,8 @@ def train_one2many():
                     _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs_dict, target_weights_dict, bucket_id, True)
 
                     print("  eval: bucket %d" % (bucket_id))
-                    for j in range(6):
-                        eval_ppx = math.exp(eval_loss) if eval_loss < 300 else float('inf')
+                    for j in range(len(EMOTION_TYPE)):
+                        eval_ppx = math.exp(eval_loss[j]) if eval_loss[j] < 300 else float('inf')
                         print("      emotion %d perplexity %.2f" % (j, eval_ppx))
 
                 sys.stdout.flush()
