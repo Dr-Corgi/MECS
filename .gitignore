@@ -6,7 +6,7 @@ save/lstm/*
 save/blstm/*
 save/blstma/*
 *.pyc
-legacy_models/backup/*
+legacy_models/*
 test/*
 dict/vector/*
 legacy_models/*/*
