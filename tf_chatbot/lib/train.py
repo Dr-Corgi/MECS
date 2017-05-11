@@ -46,8 +46,8 @@ def train_one2many():
                                          target_weights_dict, bucket_id, forward_only=False)
 
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
-            for k in EMOTION_TYPE.keys():
-                loss[k] += step_loss[k] / FLAGS.steps_per_checkpoint
+            for k, k_loss in step_loss.items():
+                loss[k] += k_loss / FLAGS.steps_per_checkpoint
             current_step += 1
 
             if current_step % FLAGS.steps_per_checkpoint == 0:
