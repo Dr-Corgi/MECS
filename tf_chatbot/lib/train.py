@@ -28,9 +28,10 @@ def train_one2many():
         train_buckets_scale = [sum(train_bucket_sizes[:i+1]) / train_total_size
                                for i in range(len(train_bucket_sizes))]
 
-        step_time, loss = 0.0, 0.0
+        step_time = 0.0
         current_step = 0
         previous_losses = []
+        loss = {k:0.0 for k in EMOTION_TYPE.keys()}
 
         while True:
             random_number_01 = np.random.random_sample()
@@ -45,18 +46,20 @@ def train_one2many():
                                          target_weights_dict, bucket_id, forward_only=False)
 
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
-            #print("===== Step: %d =====" % model.global_step.eval())
-            #for index, l in step_loss.items():
-            #    print("Emotion %d loss %.4f perplexity %.4f" % (index, l, math.exp(l)))
-            #print(sum([l for _,l in step_loss.items()]))
-            #print(sum([l for _,l in step_loss.items()])/6)
-            loss += np.mean([l for _,l in step_loss.items()]) / FLAGS.steps_per_checkpoint
+            for k in EMOTION_TYPE.keys():
+                loss[k] += step_loss[k] / FLAGS.steps_per_checkpoint
             current_step += 1
 
             if current_step % FLAGS.steps_per_checkpoint == 0:
-                perplexity = math.exp(loss) if loss < 300 else float('inf')
-                print("global step %d learning rate %.4f step-time %.2f perplexity %.2f" %
-                      (model.global_step.eval(), model.learning_rate.eval(), step_time, perplexity))
+                perplexity = {k: math.exp(k_loss) if loss < 300 else float('inf') for k,k_loss in loss.items()}
+                print("global step %d learning rate %.4f step-time %.2f" %
+                      (model.global_step.eval(), model.learning_rate.eval(), step_time))
+                print("   perplexity emotion %s: %.2f\n   perplexity emotion %s: %.2f\n"
+                      "   perplexity emotion %s: %.2f\n   perplexity emotion %s: %.2f\n"
+                      "   perplexity emotion %s: %.2f\n   perplexity emotion %s: %.2f\n"
+                      % (EMOTION_TYPE[0], perplexity[0], EMOTION_TYPE[1], perplexity[1],
+                         EMOTION_TYPE[2], perplexity[2], EMOTION_TYPE[3], perplexity[3],
+                         EMOTION_TYPE[4], perplexity[4], EMOTION_TYPE[5], perplexity[5]))
 
                 if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
                     sess.run(model.learning_rate_decay_op)
@@ -74,7 +77,7 @@ def train_one2many():
                     print("  eval: bucket %d" % (bucket_id))
                     for j in range(len(EMOTION_TYPE)):
                         eval_ppx = math.exp(eval_loss[j]) if eval_loss[j] < 300 else float('inf')
-                        print("      emotion %d perplexity %.2f" % (j, eval_ppx))
+                        print("      emotion %s perplexity %.2f" % (EMOTION_TYPE[j], eval_ppx))
 
                 sys.stdout.flush()
 
@@ -114,6 +117,7 @@ def train():
 
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
             loss += step_loss / FLAGS.steps_per_checkpoint
+
             current_step += 1
 
             if current_step % FLAGS.steps_per_checkpoint == 0:
