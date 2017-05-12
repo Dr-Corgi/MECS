@@ -13,6 +13,20 @@ from tensorflow.contrib.legacy_seq2seq import sequence_loss, attention_decoder
 from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell, EmbeddingWrapper, static_rnn, OutputProjectionWrapper
 
 
+def _extract_argmax_and_embed(embedding,
+                              output_projection=None,
+                              update_embedding=True):
+    def loop_function(prev, _):
+        if output_projection is not None:
+            prev = tf.nn.xw_plus_b(prev, output_projection[0], output_projection[1])
+        prev_symbol = tf.argmax(prev, 1)
+        emb_prev = tf.nn.embedding_lookup(embedding, prev_symbol)
+        if not update_embedding:
+            emb_prev = tf.stop_gradient(emb_prev)
+        return emb_prev
+
+    return loop_function
+
 def _extract_sample_and_embed(embedding,
                               output_projection=None,
                               update_embedding=True):
@@ -42,7 +56,7 @@ def embedding_attention_decoder(decoder_inputs,
                                 feed_previous=False,
                                 update_embedding_for_previous=True,
                                 dtype=None,
-                                scope=None,
+                                use_sample=True,
                                 initial_state_attention=False):
     if output_size is None:
         output_size = cell.output_size
@@ -53,9 +67,17 @@ def embedding_attention_decoder(decoder_inputs,
     with tf.variable_scope("embedding_attention_decoder", dtype=dtype):
         embedding = tf.get_variable("embedding", [num_symbols, embedding_size])
 
-        loop_function = _extract_sample_and_embed(
-            embedding, output_projection,
-            update_embedding_for_previous) if feed_previous else None
+        if feed_previous:
+            if use_sample:
+                loop_function = _extract_sample_and_embed(
+                    embedding, output_projection,
+                    update_embedding_for_previous)
+            else:
+                loop_function = _extract_argmax_and_embed(
+                    embedding, output_projection,
+                    update_embedding_for_previous)
+        else:
+            loop_function = None
         emb_inp = [
             tf.nn.embedding_lookup(
                 embedding,
@@ -85,6 +107,7 @@ class Seq2SeqModel(object):
                  learning_rate_decay_factor,
                  use_lstm=False,
                  num_samples=512,
+                 use_sample=True,
                  forward_only=False,
                  beam_search_size=1,
                  dtype=tf.float32):
@@ -99,6 +122,7 @@ class Seq2SeqModel(object):
             self.learning_rate * learning_rate_decay_factor)
         self.global_step = tf.Variable(0, trainable=False)
         self.beam_search_size = beam_search_size
+        self.use_sample = use_sample
 
         # If we use sampled softmax, we need an output projection.
         output_projection = None
@@ -392,7 +416,7 @@ class Seq2SeqModel(object):
                     new_beams.sort(key=lambda x: x[0], reverse=True)
                     beams = []
                     for beam_ in new_beams:
-                        if beam_[2] == data_utils.EOS_ID:
+                        if beam_[2] == data_utils.EOS_ID and len(beam_[1]) > 2:
                             result.append(
                                 (beam_[0], beam_[1][:-1], beam_[2], beam_[3]))
                         else:
