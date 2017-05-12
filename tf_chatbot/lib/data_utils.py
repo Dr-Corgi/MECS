@@ -70,7 +70,7 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
     if not gfile.Exists(vocabulary_path):
         print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path))
         vocab = {}
-        data = json.load(open(data_path, encoding=_ENCODING))
+        data = json.load(open(data_path), encoding=_ENCODING)
         counter = 0
         for ((q,qe),(a,ae)) in data:
             counter += 1
@@ -122,8 +122,8 @@ def sentence_to_token_ids(sentence, vocabulary,
     else:
         words = basic_tokenizer(sentence)
     if not normalize_digits:
-        return [vocabulary.get(w, UNK_ID) for w in words]
-    return [vocabulary.get(re.sub(_DIGIT_RE, "0", w), UNK_ID) for w in words]
+        return [vocabulary.get(w.encode('utf8'), UNK_ID) for w in words]
+    return [vocabulary.get(re.sub(_DIGIT_RE, "0", w.encode('utf8')), UNK_ID) for w in words]
 
 def data_to_token_ids_bak(data_path, target_path, vocabulary_path,
                       tokenizer=None, normalize_digits=True):
@@ -147,7 +147,7 @@ def data_to_token_ids(data_path, target_path, vocabulary_path,
         print("Tokenizing data in %s" % data_path)
         vocab, _ = initialize_vocabulary(vocabulary_path)
         with gfile.GFile(target_path, mode='w') as tokens_file:
-            data = json.load(open(data_path, encoding=_ENCODING))
+            data = json.load(open(data_path), encoding=_ENCODING)
             counter = 0
             for ((q,qe),(a,ae)) in data:
                 counter += 1

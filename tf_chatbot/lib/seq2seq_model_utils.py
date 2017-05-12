@@ -24,6 +24,7 @@ def create_model(session, forward_only):
         learning_rate=FLAGS.learning_rate,
         learning_rate_decay_factor=FLAGS.learning_rate_decay_factor,
         use_lstm=False,
+        beam_search_size=FLAGS.beam_search_size,
         forward_only=forward_only)
 
     ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
@@ -37,7 +38,7 @@ def create_model(session, forward_only):
         session.run(tf.global_variables_initializer())
     return model
 
-def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess):
+def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_beam_search=False):
     input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
 
     bucket_id = min([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
@@ -46,17 +47,20 @@ def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess):
     feed_data = {bucket_id: [(input_token_ids, outputs)]}
     encoder_inputs, decoder_inputs, target_weights = model.get_batch(feed_data, bucket_id)
 
-    _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
+    if use_beam_search:
+        _, _, output_words = model.step_beam_search(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
+        outputs = output_words[1:]
+        output_sentence = ' '.join([rev_vocab[token_id] for token_id in outputs])
 
-    outputs = []
-
-    for logit in output_logits:
-        selected_token_id = int(np.argmax(logit, axis=1))
-        if selected_token_id == data_utils.EOS_ID:
-            break
-        else:
-            outputs.append(selected_token_id)
-
-    output_sentence = ' '.join([rev_vocab[output] for output in outputs])
+    else:
+        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
+        outputs = []
+        for logit in output_logits:
+            selected_token_id = int(np.argmax(logit, axis=1))
+            if selected_token_id == data_utils.EOS_ID:
+                break
+            else:
+                outputs.append(selected_token_id)
+        output_sentence = ' '.join([rev_vocab[output] for output in outputs])
 
     return output_sentence

@@ -9,7 +9,7 @@ import json
 
 def predict():
     def _get_test_dataset():
-        data = json.load(open(TEST_DATASET_PATH, encoding=data_utils._ENCODING))
+        data = json.load(open(TEST_DATASET_PATH))
         test_sentences = [q for ((q, qe), _) in data]
         return test_sentences
 
@@ -27,7 +27,8 @@ def predict():
         test_dataset = _get_test_dataset()
 
         for sentence in test_dataset:
-            predicted_sentence = get_predicted_sentence(sentence, vocab, rev_vocab, model, sess)
-            print(sentence, '->', predicted_sentence)
+            predicted_sentence = get_predicted_sentence(sentence, vocab, rev_vocab, model, sess, use_beam_search=True)
+            print(sentence, '->')
+            print(predicted_sentence)
 
             results_fh.write(predicted_sentence + '\n')
