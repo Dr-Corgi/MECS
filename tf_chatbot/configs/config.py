@@ -12,7 +12,7 @@ tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.99, 'Learning rate dec
 tf.app.flags.DEFINE_float('max_gradient_norm', 5.0, 'Clip gradients to this norm')
 tf.app.flags.DEFINE_integer('batch_size', 128, 'Batch size to use during training')
 
-tf.app.flags.DEFINE_integer('vocab_size', 1000, 'Dialog vocabulary size')
+tf.app.flags.DEFINE_integer('vocab_size', 20000, 'Dialog vocabulary size')
 tf.app.flags.DEFINE_integer('size', 128, 'size of each model layer')
 tf.app.flags.DEFINE_integer('num_layers', 1, 'Numbers of layers in the model')
 tf.app.flags.DEFINE_integer('beam_search_size', 3, 'Size of beam search op')

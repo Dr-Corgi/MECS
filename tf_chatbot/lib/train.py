@@ -50,8 +50,7 @@ def train():
             _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
                                          target_weights, bucket_id, forward_only=False)
 
-            step_time += (time.time() - start_time) / \
-                FLAGS.steps_per_checkpoint
+            step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
             loss += step_loss / FLAGS.steps_per_checkpoint
             current_step += 1
 
