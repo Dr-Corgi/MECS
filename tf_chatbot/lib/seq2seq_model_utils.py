@@ -12,6 +12,7 @@ from tf_chatbot.lib import seq2seq_model
 
 _INDEX = ".index"
 
+
 def create_model(session, forward_only):
     model = seq2seq_model.Seq2SeqModel(
         source_vocab_size=FLAGS.vocab_size,
@@ -33,27 +34,41 @@ def create_model(session, forward_only):
         model.saver.restore(session, ckpt.model_checkpoint_path)
     else:
         if ckpt:
-            print("Unable to reach checkpoint file %s." % ckpt.model_checkpoint_path)
+            print(
+                "Unable to reach checkpoint file %s." %
+                ckpt.model_checkpoint_path)
         print("Create model with fresh parameters")
         session.run(tf.global_variables_initializer())
     return model
 
-def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_beam_search=False):
+
+def get_predicted_sentence(
+        input_sentence,
+        vocab,
+        rev_vocab,
+        model,
+        sess,
+        use_beam_search=False):
     input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
 
-    bucket_id = min([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
+    bucket_id = min([b for b in range(len(BUCKETS))
+                     if BUCKETS[b][0] > len(input_token_ids)])
     outputs = []
 
     feed_data = {bucket_id: [(input_token_ids, outputs)]}
-    encoder_inputs, decoder_inputs, target_weights = model.get_batch(feed_data, bucket_id)
+    encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+        feed_data, bucket_id)
 
     if use_beam_search:
-        _, _, output_words = model.step_beam_search(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
+        _, _, output_words = model.step(
+            sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True, use_beam_search=True)
         outputs = output_words[1:]
-        output_sentence = ' '.join([rev_vocab[token_id] for token_id in outputs])
+        output_sentence = ' '.join([rev_vocab[token_id]
+                                    for token_id in outputs])
 
     else:
-        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
+        _, _, output_logits = model.step(
+            sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
         outputs = []
         for logit in output_logits:
             selected_token_id = int(np.argmax(logit, axis=1))
