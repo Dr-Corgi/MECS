@@ -5,6 +5,7 @@ from __future__ import print_function
 import os
 import re
 import sys
+import platform
 import json
 
 from tensorflow.python.platform import gfile
@@ -134,15 +135,15 @@ def sentence_to_token_ids(sentence, vocabulary,
         words = tokenizer(sentence)
     else:
         words = basic_tokenizer(sentence)
-    if not normalize_digits:
-        return [vocabulary.get(w.encode('utf8'), UNK_ID) for w in words]
-    return [
-        vocabulary.get(
-            re.sub(
-                _DIGIT_RE,
-                "0",
-                w.encode('utf8')),
-            UNK_ID) for w in words]
+    if platform.system() == "Windows":
+        if not normalize_digits:
+            return [vocabulary.get(w, UNK_ID) for w in words]
+        return [vocabulary.get(re.sub(_DIGIT_RE, "0", w), UNK_ID) for w in words]
+
+    else:
+        if not normalize_digits:
+            return [vocabulary.get(w.encode('utf8'), UNK_ID) for w in words]
+        return [vocabulary.get(re.sub(_DIGIT_RE, "0", w.encode('utf8')), UNK_ID) for w in words]
 
 
 def data_to_token_ids_bak(data_path, target_path, vocabulary_path,
