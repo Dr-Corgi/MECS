@@ -41,7 +41,7 @@ def train():
         total_epoch = FLAGS.epoch_size
         epoch_steps = np.sum([len(ts) for ts in train_set]) / FLAGS.batch_size + 1
 
-        while _ in range(epoch_steps * total_epoch):
+        while model.global_step.eval() < (epoch_steps * total_epoch):
             random_number_01 = np.random.random_sample()
             bucket_id = min([i for i in range(len(train_buckets_scale))
                              if train_buckets_scale[i] > random_number_01])
