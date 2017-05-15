@@ -20,7 +20,7 @@ def predict():
 
     with tf.Session() as sess, open(results_path, 'w') as results_fh:
 
-        model = create_model(sess, forward_only=True, use_sample=False)
+        model = create_model(sess, forward_only=True, use_sample=True)
         model.batch_size = 1
 
         vocab_path = os.path.join(
