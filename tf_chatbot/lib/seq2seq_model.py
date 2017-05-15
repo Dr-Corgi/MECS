@@ -35,7 +35,7 @@ def _extract_sample_and_embed(embedding,
         if output_projection is not None:
             prev = tf.nn.xw_plus_b(
                 prev, output_projection[0], output_projection[1])
-            prev_symbol = tf.squeeze(tf.multinomial(prev, 1), axis=1)
+            prev_symbol = tf.squeeze(tf.multinomial(tf.nn.softmax(prev), 1), axis=1)
         emb_prev = tf.nn.embedding_lookup(embedding, prev_symbol)
         if not update_embedding:
             emb_prev = tf.stop_gradient(emb_prev)
@@ -373,53 +373,65 @@ class Seq2SeqModel(object):
                 # attention_state, encoder_state
                 outputs = session.run(output_feed, input_feed)
                 # score, result, last_token, encoder_state
+
+                temp_encoder_states = outputs[1][0]
+
                 beams = [(0.0,
                           [data_utils.GO_ID],
                           data_utils.GO_ID,
-                          outputs[1])] * 3
+                          outputs[1][0])] * self.beam_search_size
                 result = []
                 step = 0
                 attention_state = outputs[0]
 
-                while step < decoder_size and len(
-                        result) < self.beam_search_size:
+                while step < decoder_size and len(result) < self.beam_search_size:
                     step += 1
-                    _last_tokens = [beam_[2] for beam_ in beams]
                     _encoder_state = [beam_[3] for beam_ in beams]
-                    output_feed = [
-                        self.topk_ids[bucket_id],
-                        self.topk_probs[bucket_id],
-                        self.decoder_out_state[bucket_id]]
+                    output_feed = self.outputs[bucket_id]
+                        #self.decoder_out_state[bucket_id]]
                     input_feed = {}
                     input_feed[self.model_attention_states[bucket_id].name] = attention_state
-                    input_feed[self.model_encoder_states[bucket_id].name] = np.squeeze(
-                        np.array(_encoder_state))
+                    input_feed[self.model_encoder_states[bucket_id].name] = np.squeeze(np.array(_encoder_state))
+
                     for l in range(step):
-                        _decoder_inputs = [beam_[1][l] for beam_ in beams]
+                        _decoder_inputs = np.array([beam_[1][l] for beam_ in beams])
                         input_feed[self.decoder_inputs[l].name] = _decoder_inputs
 
-                    _tok_ids, _tok_probs, _out_states = session.run(
-                        output_feed, input_feed)
+                    _outputs = session.run(output_feed, input_feed)
+
+                    _tok_probs, _tok_ids = [], []
+                    for _idx in range(self.beam_search_size):
+                        _tok_prob, _tok_id = tf.nn.top_k(tf.nn.softmax(_outputs[step-1][_idx]), self.beam_search_size)
+                        _tok_probs.append(_tok_prob.eval())
+                        _tok_ids.append(_tok_id.eval())
 
                     new_beams = []
 
                     for beam_idx in range(self.beam_search_size):
                         for _idx in range(self.beam_search_size):
+                            #print("before - ", "score:", beams[beam_idx][0], "strs:", beams[beam_idx][1], "next:", beams[beam_idx][2])
                             new_beams.append(
                                 (beams[beam_idx][0] + _tok_probs[beam_idx][_idx],
-                                 beams[beam_idx][1] + [
-                                    _tok_ids[beam_idx][_idx]],
-                                    _tok_ids[beam_idx][_idx],
-                                    _out_states[beam_idx]))
+                                 beams[beam_idx][1] + [_tok_ids[beam_idx][_idx]],
+                                 _tok_ids[beam_idx][_idx],
+                                 #_out_states[beam_idx]))
+                                 temp_encoder_states))
+                            #print("after - ", "score:", new_beams[-1][0], "strs:", new_beams[-1][1], "next:",new_beams[-1][2])
+                            #print("=========")
 
                     new_beams.sort(key=lambda x: x[0], reverse=True)
+
+                    unduplicate_set = set()
                     beams = []
                     for beam_ in new_beams:
+                        #if False:
                         if beam_[2] == data_utils.EOS_ID and len(beam_[1]) > 2:
                             result.append(
                                 (beam_[0], beam_[1][:-1], beam_[2], beam_[3]))
                         else:
-                            beams.append(beam_)
+                            if str(beam_[1]) not in unduplicate_set:
+                                unduplicate_set.add(str(beam_[1]))
+                                beams.append(beam_)
                             if len(beams) == self.beam_search_size:
                                 break
 

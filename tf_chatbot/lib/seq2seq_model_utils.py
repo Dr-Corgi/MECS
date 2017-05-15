@@ -61,10 +61,22 @@ def get_predicted_sentence(
         feed_data, bucket_id)
 
     if use_beam_search:
+        new_encoder_inputs, new_decoder_inputs, new_target_weights = [],[],[]
+        for _array in decoder_inputs:
+            for _item in _array:
+                _de_input = np.array([_item] * FLAGS.beam_search_size, dtype=np.int32)
+                new_decoder_inputs.append(_de_input)
+        for _array in encoder_inputs:
+            for _item in _array:
+                _en_input = np.array([_item] * FLAGS.beam_search_size, dtype=np.int32)
+                new_encoder_inputs.append(_en_input)
+        for _array in target_weights:
+            for _item in _array:
+                _ta_input = np.array([_item] * FLAGS.beam_search_size, dtype=np.int32)
+                new_target_weights.append(_ta_input)
+
         _, _, output_words = model.step(
-            sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True, use_beam_search=True)
-        print("HERE!!!!!")
-        print(output_words)
+            sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id, forward_only=True, use_beam_search=True)
         outputs = output_words[1:]
         output_sentence = ' '.join([rev_vocab[token_id]
                                     for token_id in outputs])
