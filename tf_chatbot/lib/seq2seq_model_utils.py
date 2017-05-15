@@ -13,7 +13,7 @@ from tf_chatbot.lib import seq2seq_model
 _INDEX = ".index"
 
 
-def create_model(session, forward_only, use_sample=True):
+def create_model(session, forward_only, use_sample=False):
     model = seq2seq_model.Seq2SeqModel(
         source_vocab_size=FLAGS.vocab_size,
         target_vocab_size=FLAGS.vocab_size,

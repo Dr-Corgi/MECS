@@ -21,7 +21,7 @@ def train():
         print (
             "Creating %d layers of %d units." %
             (FLAGS.num_layers, FLAGS.size))
-        model = create_model(sess, forward_only=False, )
+        model = create_model(sess, forward_only=False)
 
         print (
             "Reading development and training data (limit:%d)." %

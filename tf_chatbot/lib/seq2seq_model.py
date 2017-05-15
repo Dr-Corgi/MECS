@@ -56,7 +56,7 @@ def embedding_attention_decoder(decoder_inputs,
                                 feed_previous=False,
                                 update_embedding_for_previous=True,
                                 dtype=None,
-                                use_sample=True,
+                                use_sample=False,
                                 initial_state_attention=False):
     if output_size is None:
         output_size = cell.output_size
@@ -79,9 +79,7 @@ def embedding_attention_decoder(decoder_inputs,
         else:
             loop_function = None
         emb_inp = [
-            tf.nn.embedding_lookup(
-                embedding,
-                i) for i in decoder_inputs]
+            tf.nn.embedding_lookup(embedding,i) for i in decoder_inputs]
 
         return attention_decoder(
             emb_inp,
@@ -107,7 +105,7 @@ class Seq2SeqModel(object):
                  learning_rate_decay_factor,
                  use_lstm=False,
                  num_samples=512,
-                 use_sample=True,
+                 use_sample=False,
                  forward_only=False,
                  beam_search_size=1,
                  dtype=tf.float32):
@@ -226,6 +224,7 @@ class Seq2SeqModel(object):
                             output_size=output_size,
                             output_projection=output_projection,
                             feed_previous=feed_previous,
+                            use_sample=self.use_sample,
                             initial_state_attention=initial_state_attention)
 
                     else:
