@@ -120,6 +120,7 @@ def train():
 
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
             loss += step_loss / FLAGS.steps_per_checkpoint
+
             current_step += 1
 
             if current_step % FLAGS.steps_per_checkpoint == 0:
