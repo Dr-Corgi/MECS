@@ -13,7 +13,7 @@ from tf_chatbot.lib import seq2seq_model
 _INDEX = ".index"
 
 
-def gicreate_model(session, forward_only):
+def create_model(session, forward_only, use_sample=True):
     model = seq2seq_model.Seq2SeqModel(
         source_vocab_size=FLAGS.vocab_size,
         target_vocab_size=FLAGS.vocab_size,
@@ -25,6 +25,7 @@ def gicreate_model(session, forward_only):
         learning_rate=FLAGS.learning_rate,
         learning_rate_decay_factor=FLAGS.learning_rate_decay_factor,
         use_lstm=False,
+        use_sample=use_sample,
         beam_search_size=FLAGS.beam_search_size,
         forward_only=forward_only)
 
@@ -62,6 +63,8 @@ def get_predicted_sentence(
     if use_beam_search:
         _, _, output_words = model.step(
             sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True, use_beam_search=True)
+        print("HERE!!!!!")
+        print(output_words)
         outputs = output_words[1:]
         output_sentence = ' '.join([rev_vocab[token_id]
                                     for token_id in outputs])

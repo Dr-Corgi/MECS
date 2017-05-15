@@ -20,7 +20,7 @@ def predict():
 
     with tf.Session() as sess, open(results_path, 'w') as results_fh:
 
-        model = create_model(sess, forward_only=True)
+        model = create_model(sess, forward_only=True, use_sample=False)
         model.batch_size = 1
 
         vocab_path = os.path.join(
@@ -33,8 +33,8 @@ def predict():
 
         for sentence in test_dataset:
             predicted_sentence = get_predicted_sentence(
-                sentence, vocab, rev_vocab, model, sess, use_beam_search=True)
-            print(sentence, '->')
+                sentence, vocab, rev_vocab, model, sess, use_beam_search=False)
+            print(sentence.strip(), '->')
             print(predicted_sentence)
 
             results_fh.write(predicted_sentence + '\n')
