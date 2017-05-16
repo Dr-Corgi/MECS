@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from tf_chatbot.configs.config import FLAGS
 from tf_chatbot.lib import data_utils
-from tf_chatbot.lib.seq2seq_model_utils import create_model, get_predicted_sentence
+from tf_chatbot.lib.one2many_model_utils import create_model, get_predicted_sentence
 
 def chat():
     with tf.Session() as sess:
