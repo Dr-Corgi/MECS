@@ -31,7 +31,7 @@ def train_one2many():
         step_time = 0.0
         current_step = 0
         previous_losses = []
-        loss = {k:0.0 for k in EMOTION_TYPE.keys()}
+        bucket_loss = {k:0.0 for k in EMOTION_TYPE.keys()}
 
         while True:
             random_number_01 = np.random.random_sample()
@@ -48,11 +48,11 @@ def train_one2many():
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
 
             for k, k_loss in step_loss.items():
-                loss[k] += k_loss / FLAGS.steps_per_checkpoint
+                bucket_loss[k] += k_loss / FLAGS.steps_per_checkpoint
             current_step += 1
 
             if current_step % FLAGS.steps_per_checkpoint == 0:
-                perplexity = {k: math.exp(k_loss) if loss < 300 else float('inf') for k,k_loss in loss.items()}
+                perplexity = {k: math.exp(k_loss) if k_loss < 300 else float('inf') for k,k_loss in bucket_loss.items()}
                 print("global step %d learning rate %.4f step-time %.2f" %
                       (model.global_step.eval(), model.learning_rate.eval(), step_time))
                 print("   perplexity emotion %s: %.2f\n   perplexity emotion %s: %.2f\n"
@@ -62,10 +62,12 @@ def train_one2many():
                          EMOTION_TYPE[2], perplexity[2], EMOTION_TYPE[3], perplexity[3],
                          EMOTION_TYPE[4], perplexity[4], EMOTION_TYPE[5], perplexity[5]))
 
-                if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+                avg_loss = np.mean([k_loss for _,k_loss in bucket_loss.items()])
+
+                if len(previous_losses) > 2 and avg_loss > max(previous_losses[-3:]):
                     sess.run(model.learning_rate_decay_op)
 
-                previous_losses.append(loss)
+                previous_losses.append(avg_loss)
 
                 checkpoint_path = os.path.join(FLAGS.model_dir, 'model.ckpt')
                 model.saver.save(sess, checkpoint_path, global_step=model.global_step)
