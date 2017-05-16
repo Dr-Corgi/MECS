@@ -3,22 +3,16 @@ from __future__ import division
 from __future__ import print_function
 
 import random
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import variable_scope
-from tensorflow.contrib.rnn.python.ops import core_rnn_cell
-from tensorflow.contrib.rnn.python.ops import core_rnn
-from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.util import nest
+
 from tensorflow.contrib.legacy_seq2seq import sequence_loss_by_example, sequence_loss, embedding_rnn_decoder
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell
-#from tensorflow.contrib.legacy_seq2seq import one2many_rnn_seq2seq
+from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell, EmbeddingWrapper, static_rnn
 from tf_chatbot.lib import data_utils
 from tf_chatbot.configs.config import EMOTION_TYPE
 
-class One2ManyModel(object):
 
+class One2ManyModel(object):
     def __init__(self,
                  source_vocab_size,
                  target_vocab_size,
@@ -84,7 +78,8 @@ class One2ManyModel(object):
             cell = MultiRNNCell([single_cell() for _ in range(num_layers)])
 
         def one2many_f(encoder_inputs, decoder_input_dict, do_decode):
-            num_decoder_symbols_dict={0:target_vocab_size,1:target_vocab_size,2:target_vocab_size,3:target_vocab_size,4:target_vocab_size,5:target_vocab_size}
+            num_decoder_symbols_dict = {0: target_vocab_size, 1: target_vocab_size, 2: target_vocab_size,
+                                        3: target_vocab_size, 4: target_vocab_size, 5: target_vocab_size}
             return one2many_rnn_seq2seq(
                 encoder_inputs=encoder_inputs,
                 decoder_inputs_dict=decoder_input_dict,
@@ -93,7 +88,8 @@ class One2ManyModel(object):
                 num_decoder_symbols_dict=num_decoder_symbols_dict,
                 embedding_size=size,
                 feed_previous=do_decode,
-                output_projection=output_projection
+                output_projection=output_projection,
+                dtype=tf.float32
             )
 
         # Feeds for inputs
@@ -104,23 +100,23 @@ class One2ManyModel(object):
         for i in range(buckets[-1][0]):
             self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
                                                       name="encoder{0}".format(i)))
-        for j in range(len(EMOTION_TYPE)): # six emotion types
+        for j in range(len(EMOTION_TYPE)):  # six emotion types
             for i in range(buckets[-1][1] + 1):
                 self.decoder_inputs_dict[j].append(tf.placeholder(tf.int32, shape=[None],
-                                                                  name="decoder{0}_{1}".format(i,j)))
+                                                                  name="decoder{0}_{1}".format(i, j)))
                 self.target_weights[j].append(tf.placeholder(dtype, shape=[None],
-                                                             name="weight{0}_{1}".format(i,j)))
+                                                             name="weight{0}_{1}".format(i, j)))
 
         # targets are decoder inputs shifted by one
         targets = data_utils.DICT_LIST(EMOTION_TYPE)
         for j in range(len(EMOTION_TYPE)):
-            targets[j] = [self.decoder_inputs_dict[j][i+1]
-                          for i in range(len(self.decoder_inputs_dict[j])-1)]
+            targets[j] = [self.decoder_inputs_dict[j][i + 1]
+                          for i in range(len(self.decoder_inputs_dict[j]) - 1)]
 
         if forward_only:
             self.outputs, self.losses = model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs_dict,
-                targets,self.target_weights, buckets, lambda x,y: one2many_f(x, y, True),
+                targets, self.target_weights, buckets, lambda x, y: one2many_f(x, y, True),
                 softmax_loss_function=softmax_loss_function)
             if output_projection is not None:
                 for b in range(len(buckets)):
@@ -133,7 +129,7 @@ class One2ManyModel(object):
             self.outputs, self.losses = model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs_dict, targets,
                 self.target_weights, buckets,
-                lambda x,y: one2many_f(x, y, False),
+                lambda x, y: one2many_f(x, y, False),
                 softmax_loss_function=softmax_loss_function)
 
         params = tf.trainable_variables()
@@ -179,7 +175,7 @@ class One2ManyModel(object):
         for length_idx in range(encoder_size):
             batch_encoder_inputs.append(
                 np.array([encoder_inputs[batch_idx][length_idx]
-                          for batch_idx in range(self.batch_size)],dtype=np.int32))
+                          for batch_idx in range(self.batch_size)], dtype=np.int32))
 
         for j in range(len(EMOTION_TYPE)):
             for length_idx in range(decoder_size):
@@ -190,7 +186,7 @@ class One2ManyModel(object):
                 batch_weight = np.ones(self.batch_size, dtype=np.float32)
                 for batch_idx in range(self.batch_size):
                     if length_idx < decoder_size - 1:
-                        target = decoder_inputs[j][batch_idx][length_idx+1]
+                        target = decoder_inputs[j][batch_idx][length_idx + 1]
                     if length_idx == decoder_size - 1 or target == data_utils.PAD_ID:
                         batch_weight[batch_idx] = 0.0
                 batch_weights[j].append(batch_weight)
@@ -223,15 +219,15 @@ class One2ManyModel(object):
             input_feed[last_target] = np.zeros([self.batch_size], dtype=np.int32)
 
         if not forward_only:
-            updates_feed = {j:self.updates[j][bucket_id] for j in range(len(EMOTION_TYPE))}
-            gnorm_feed = {j:self.gradient_norms[j][bucket_id] for j in range(len(EMOTION_TYPE))}
-            loss_feed = {j:self.losses[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+            updates_feed = {j: self.updates[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+            gnorm_feed = {j: self.gradient_norms[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+            loss_feed = {j: self.losses[j][bucket_id] for j in range(len(EMOTION_TYPE))}
             output_feed = [updates_feed,
                            gnorm_feed,
                            loss_feed]
         else:
-            loss_feed = {j:self.losses[j][bucket_id] for j in range(len(EMOTION_TYPE))}
-            pred_feed = {j:self.outputs[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+            loss_feed = {j: self.losses[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+            pred_feed = {j: self.outputs[j][bucket_id] for j in range(len(EMOTION_TYPE))}
             output_feed = [loss_feed, pred_feed]
 
         outputs = session.run(output_feed, input_feed)
@@ -239,7 +235,6 @@ class One2ManyModel(object):
             return outputs[1], outputs[2], None
         else:
             return None, outputs[0], outputs[1]
-
 
 
 def model_with_buckets(encoder_inputs,
@@ -251,57 +246,56 @@ def model_with_buckets(encoder_inputs,
                        softmax_loss_function=None,
                        per_example_loss=False,
                        name=None):
+    if len(encoder_inputs) < buckets[-1][0]:
+        raise ValueError("Length of encoder_inputs (%d) must be at least that of la"
+                         "st bucket (%d)." % (len(encoder_inputs), buckets[-1][0]))
+    for j in range(len(EMOTION_TYPE)):
+        if len(targets[j]) < buckets[-1][1]:
+            raise ValueError("Length of targets[%d] (%d) must be at least that of last"
+                             "bucket (%d)." % (j, len(targets[j]), buckets[-1][1]))
+        if len(weights[j]) < buckets[-1][1]:
+            raise ValueError("Length of weights[%d] (%d) must be at least that of last"
+                             "bucket (%d)." % (j, len(weights[j]), buckets[-1][1]))
+    all_decoder_inputs = []
+    all_targets = []
+    all_weights = []
+    for i in range(len(EMOTION_TYPE)):
+        all_decoder_inputs.append(decoder_inputs[i])
+        all_targets.append(targets[i])
+        all_weights.append(weights[i])
+    # all_inputs = encoder_inputs + decoder_inputs + targets + weights
+    all_inputs = encoder_inputs + all_decoder_inputs + all_targets + all_weights
+    losses = data_utils.DICT_LIST(EMOTION_TYPE)
+    outputs = data_utils.DICT_LIST(EMOTION_TYPE)
+    with tf.variable_scope(name, "model_with_buckets", all_inputs):
+        for j, bucket in enumerate(buckets):
+            with tf.variable_scope(tf.get_variable_scope(), reuse=True if j > 0 else None):
+                cut_decoder_inputs = {}
+                for i in range(len(EMOTION_TYPE)):
+                    cut_decoder_inputs[i] = decoder_inputs[i][:bucket[1]]
+                bucket_outputs, _ = seq2seq(encoder_inputs[:bucket[0]],
+                                            cut_decoder_inputs)
+                # outputs.append(bucket_outputs)
+                for i in range(len(EMOTION_TYPE)):
+                    outputs[i].append(bucket_outputs[i])
+                for i in range(len(EMOTION_TYPE)):
+                    if per_example_loss:
+                        losses[i].append(
+                            sequence_loss_by_example(
+                                outputs[i][-1],
+                                targets[i][:bucket[1]],
+                                weights[i][:bucket[1]],
+                                softmax_loss_function=softmax_loss_function))
+                    else:
+                        losses[i].append(
+                            sequence_loss(
+                                outputs[i][-1],
+                                targets[i][:bucket[1]],
+                                weights[i][:bucket[1]],
+                                softmax_loss_function=softmax_loss_function))
 
-  if len(encoder_inputs) < buckets[-1][0]:
-    raise ValueError("Length of encoder_inputs (%d) must be at least that of la"
-                     "st bucket (%d)." % (len(encoder_inputs), buckets[-1][0]))
-  for j in range(len(EMOTION_TYPE)):
-      if len(targets[j]) < buckets[-1][1]:
-        raise ValueError("Length of targets[%d] (%d) must be at least that of last"
-                         "bucket (%d)." % (j, len(targets[j]), buckets[-1][1]))
-      if len(weights[j]) < buckets[-1][1]:
-        raise ValueError("Length of weights[%d] (%d) must be at least that of last"
-                         "bucket (%d)." % (j, len(weights[j]), buckets[-1][1]))
-  all_decoder_inputs = []
-  all_targets = []
-  all_weights = []
-  for i in range(len(EMOTION_TYPE)):
-      all_decoder_inputs.append(decoder_inputs[i])
-      all_targets.append(targets[i])
-      all_weights.append(weights[i])
-  #all_inputs = encoder_inputs + decoder_inputs + targets + weights
-  all_inputs = encoder_inputs + all_decoder_inputs + all_targets + all_weights
-  losses = data_utils.DICT_LIST(EMOTION_TYPE)
-  outputs = data_utils.DICT_LIST(EMOTION_TYPE)
-  with ops.name_scope(name, "model_with_buckets", all_inputs):
-    for j, bucket in enumerate(buckets):
-      with variable_scope.variable_scope(
-          variable_scope.get_variable_scope(), reuse=True if j > 0 else None):
-        cut_decoder_inputs = {}
-        for i in range(len(EMOTION_TYPE)):
-            cut_decoder_inputs[i] = decoder_inputs[i][:bucket[1]]
-        bucket_outputs, _ = seq2seq(encoder_inputs[:bucket[0]],
-                                    cut_decoder_inputs)
-       # outputs.append(bucket_outputs)
-        for i in range(len(EMOTION_TYPE)):
-            outputs[i].append(bucket_outputs[i])
-        for i in range(len(EMOTION_TYPE)):
-            if per_example_loss:
-              losses[i].append(
-                  sequence_loss_by_example(
-                      outputs[i][-1],
-                      targets[i][:bucket[1]],
-                      weights[i][:bucket[1]],
-                      softmax_loss_function=softmax_loss_function))
-            else:
-              losses[i].append(
-                  sequence_loss(
-                      outputs[i][-1],
-                      targets[i][:bucket[1]],
-                      weights[i][:bucket[1]],
-                      softmax_loss_function=softmax_loss_function))
+    return outputs, losses
 
-  return outputs, losses
 
 def one2many_rnn_seq2seq(encoder_inputs,
                          decoder_inputs_dict,
@@ -313,113 +307,37 @@ def one2many_rnn_seq2seq(encoder_inputs,
                          feed_previous=False,
                          dtype=None,
                          scope=None):
-  """One-to-many RNN sequence-to-sequence model (multi-task).
 
-  This is a multi-task sequence-to-sequence model with one encoder and multiple
-  decoders. Reference to multi-task sequence-to-sequence learning can be found
-  here: http://arxiv.org/abs/1511.06114
+    outputs_dict = {}
+    state_dict = {}
 
-  Args:
-    encoder_inputs: A list of 1D int32 Tensors of shape [batch_size].
-    decoder_inputs_dict: A dictionany mapping decoder name (string) to
-      the corresponding decoder_inputs; each decoder_inputs is a list of 1D
-      Tensors of shape [batch_size]; num_decoders is defined as
-      len(decoder_inputs_dict).
-    cell: core_rnn_cell.RNNCell defining the cell function and size.
-    num_encoder_symbols: Integer; number of symbols on the encoder side.
-    num_decoder_symbols_dict: A dictionary mapping decoder name (string) to an
-      integer specifying number of symbols for the corresponding decoder;
-      len(num_decoder_symbols_dict) must be equal to num_decoders.
-    embedding_size: Integer, the length of the embedding vector for each symbol.
-    feed_previous: Boolean or scalar Boolean Tensor; if True, only the first of
-      decoder_inputs will be used (the "GO" symbol), and all other decoder
-      inputs will be taken from previous outputs (as in embedding_rnn_decoder).
-      If False, decoder_inputs are used as given (the standard decoder case).
-    dtype: The dtype of the initial state for both the encoder and encoder
-      rnn cells (default: tf.float32).
-    scope: VariableScope for the created subgraph; defaults to
-      "one2many_rnn_seq2seq"
+    with tf.variable_scope("one2many_rnn_seq2seq"):
+        # Encoder.
+        encoder_cell = EmbeddingWrapper(
+            cell,
+            embedding_classes=num_encoder_symbols,
+            embedding_size=embedding_size)
+        _, encoder_state = static_rnn(
+            encoder_cell, encoder_inputs, dtype=dtype)
 
-  Returns:
-    A tuple of the form (outputs_dict, state_dict), where:
-      outputs_dict: A mapping from decoder name (string) to a list of the same
-        length as decoder_inputs_dict[name]; each element in the list is a 2D
-        Tensors with shape [batch_size x num_decoder_symbol_list[name]]
-        containing the generated outputs.
-      state_dict: A mapping from decoder name (string) to the final state of the
-        corresponding decoder RNN; it is a 2D Tensor of shape
-        [batch_size x cell.state_size].
-  """
-  outputs_dict = {}
-  state_dict = {}
+        # Decoder.
+        for name, decoder_inputs in decoder_inputs_dict.items():
+            num_decoder_symbols = num_decoder_symbols_dict[name]
 
-  with variable_scope.variable_scope(
-      scope or "one2many_rnn_seq2seq", dtype=dtype) as scope:
-    dtype = scope.dtype
+            with tf.variable_scope("one2many_decoder_" + str(name)):
+                decoder_cell = cell
+                if isinstance(feed_previous, bool):
+                    outputs, state = embedding_rnn_decoder(
+                        decoder_inputs,
+                        encoder_state,
+                        decoder_cell,
+                        num_decoder_symbols,
+                        embedding_size,
+                        output_projection=output_projection,
+                        feed_previous=feed_previous)
+                else:
+                    raise NotImplementedError()
+            outputs_dict[name] = outputs
+            state_dict[name] = state
 
-    # Encoder.
-    encoder_cell = core_rnn_cell.EmbeddingWrapper(
-        cell,
-        embedding_classes=num_encoder_symbols,
-        embedding_size=embedding_size)
-    _, encoder_state = core_rnn.static_rnn(
-        encoder_cell, encoder_inputs, dtype=dtype)
-
-    #if output_projection is not None:
-    #    output_projection[0] = tf.transpose(output_projection[0])
-
-    # Decoder.
-    for name, decoder_inputs in decoder_inputs_dict.items():
-      num_decoder_symbols = num_decoder_symbols_dict[name]
-
-      with variable_scope.variable_scope("one2many_decoder_" + str(
-          name)) as scope:
-        #decoder_cell = core_rnn_cell.OutputProjectionWrapper(
-        #    cell, num_decoder_symbols)
-        decoder_cell = cell
-        if isinstance(feed_previous, bool):
-          outputs, state = embedding_rnn_decoder(
-              decoder_inputs,
-              encoder_state,
-              decoder_cell,
-              num_decoder_symbols,
-              embedding_size,
-              output_projection=output_projection,
-              feed_previous=feed_previous)
-        else:
-          # If feed_previous is a Tensor, we construct 2 graphs and use cond.
-          def filled_embedding_rnn_decoder(feed_previous):
-            """The current decoder with a fixed feed_previous parameter."""
-            # pylint: disable=cell-var-from-loop
-            reuse = None if feed_previous else True
-            vs = variable_scope.get_variable_scope()
-            with variable_scope.variable_scope(vs, reuse=reuse):
-              outputs, state = embedding_rnn_decoder(
-                  decoder_inputs,
-                  encoder_state,
-                  decoder_cell,
-                  num_decoder_symbols,
-                  embedding_size,
-                  output_projection=output_projection,
-                  feed_previous=feed_previous)
-            # pylint: enable=cell-var-from-loop
-            state_list = [state]
-            if nest.is_sequence(state):
-              state_list = nest.flatten(state)
-            return outputs + state_list
-
-          outputs_and_state = control_flow_ops.cond(
-              feed_previous, lambda: filled_embedding_rnn_decoder(True),
-              lambda: filled_embedding_rnn_decoder(False))
-          # Outputs length is the same as for decoder inputs.
-          outputs_len = len(decoder_inputs)
-          outputs = outputs_and_state[:outputs_len]
-          state_list = outputs_and_state[outputs_len:]
-          state = state_list[0]
-          if nest.is_sequence(encoder_state):
-            state = nest.pack_sequence_as(
-                structure=encoder_state, flat_sequence=state_list)
-      outputs_dict[name] = outputs
-      state_dict[name] = state
-
-  return outputs_dict, state_dict
+    return outputs_dict, state_dict

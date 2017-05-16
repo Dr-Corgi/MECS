@@ -15,12 +15,13 @@ tf.app.flags.DEFINE_integer('batch_size', 128, 'Batch size to use during trainin
 tf.app.flags.DEFINE_integer('vocab_size', 20000, 'Dialog vocabulary size')
 tf.app.flags.DEFINE_integer('size', 128, 'size of each model layer')
 tf.app.flags.DEFINE_integer('num_layers', 1, 'Numbers of layers in the model')
+tf.app.flags.DEFINE_integer('epoch_size', 20, 'Numbers of epoch')
 
 tf.app.flags.DEFINE_integer('max_train_data_size', 0, 'Limit on the size of training data (0: no limit)')
 tf.app.flags.DEFINE_integer('steps_per_checkpoint', 100, 'How many training steps to do per checkpoint')
 
 FLAGS = tf.app.flags.FLAGS
 
-BUCKETS = [(15, 25)]
+BUCKETS = [(5,10), (10, 15), (20, 25), (40, 50)]
 
 EMOTION_TYPE = {0: "Other", 1: "Like", 2:"Sadness", 3:"Disgust", 4:"Anger", 5:"Happiness"}
