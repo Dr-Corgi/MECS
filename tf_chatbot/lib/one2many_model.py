@@ -5,17 +5,10 @@ from __future__ import print_function
 import random
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import variable_scope
-from tensorflow.contrib.rnn.python.ops import core_rnn_cell
-from tensorflow.contrib.rnn.python.ops import core_rnn
-from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import array_ops
-from tensorflow.python.util import nest
-from tensorflow.contrib.legacy_seq2seq import sequence_loss_by_example, sequence_loss, embedding_rnn_decoder
-from tensorflow.contrib.legacy_seq2seq import embedding_attention_decoder
+from tensorflow.contrib.legacy_seq2seq import sequence_loss_by_example, sequence_loss, embedding_attention_decoder
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell
-# from tensorflow.contrib.legacy_seq2seq import one2many_rnn_seq2seq
+from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell, EmbeddingWrapper, static_rnn, OutputProjectionWrapper
 from tf_chatbot.lib import data_utils
 from tf_chatbot.configs.config import EMOTION_TYPE
 
@@ -96,7 +89,8 @@ class One2ManyModel(object):
                 num_decoder_symbols_dict=num_decoder_symbols_dict,
                 embedding_size=size,
                 feed_previous=do_decode,
-                output_projection=output_projection
+                output_projection=output_projection,
+                dtype=tf.float32
             )
 
         # Feeds for inputs
@@ -274,10 +268,10 @@ def model_with_buckets(encoder_inputs,
     all_inputs = encoder_inputs + all_decoder_inputs + all_targets + all_weights
     losses = data_utils.DICT_LIST(EMOTION_TYPE)
     outputs = data_utils.DICT_LIST(EMOTION_TYPE)
-    with ops.name_scope(name, "model_with_buckets", all_inputs):
+    #with ops.name_scope(name, "model_with_buckets", all_inputs):
+    with tf.variable_scope(name, "model_with_buckets", all_inputs):
         for j, bucket in enumerate(buckets):
-            with variable_scope.variable_scope(
-                    variable_scope.get_variable_scope(), reuse=True if j > 0 else None):
+            with tf.variable_scope(tf.get_variable_scope(), reuse=True if j > 0 else None):
                 cut_decoder_inputs = {}
                 for i in range(len(EMOTION_TYPE)):
                     cut_decoder_inputs[i] = decoder_inputs[i][:bucket[1]]
@@ -320,35 +314,27 @@ def one2many_rnn_seq2seq(encoder_inputs,
     outputs_dict = {}
     state_dict = {}
 
-    with variable_scope.variable_scope(
-                    scope or "one2many_rnn_seq2seq", dtype=dtype) as scope:
-        dtype = scope.dtype
-
-        # Encoder.
-        encoder_cell = core_rnn_cell.EmbeddingWrapper(
+    with tf.variable_scope("one2many_rnn_seq2seq"):
+        encoder_cell = EmbeddingWrapper(
             cell,
             embedding_classes=num_encoder_symbols,
             embedding_size=embedding_size)
-        encoder_outputs, encoder_state = core_rnn.static_rnn(
+        encoder_outputs, encoder_state = static_rnn(
             encoder_cell, encoder_inputs, dtype=dtype)
 
-        # First calculate a concatenation of encoder ouputs to put attention on.
         top_states = [
-            array_ops.reshape(e, [-1, 1, cell.output_size]) for e in encoder_outputs
+            tf.reshape(e, [-1, 1, cell.output_size]) for e in encoder_outputs
         ]
-        attention_states = array_ops.concat(top_states, 1)
+        attention_states = tf.concat(top_states, 1)
 
         # Decoder.
         for name, decoder_inputs in decoder_inputs_dict.items():
             num_decoder_symbols = num_decoder_symbols_dict[name]
 
-            with variable_scope.variable_scope("one2many_decoder_" + str(
-                    name)) as scope:
-                # decoder_cell = core_rnn_cell.OutputProjectionWrapper(
-                #    cell, num_decoder_symbols)
+            with tf.variable_scope("one2many_decoder_" + str(name)):
                 output_size = None
                 if output_projection is None:
-                    decoder_cell = core_rnn_cell.OutputProjectionWrapper(cell, num_decoder_symbols)
+                    decoder_cell = OutputProjectionWrapper(cell, num_decoder_symbols)
                     output_size = num_decoder_symbols
                 decoder_cell = cell
                 if isinstance(feed_previous, bool):
@@ -365,42 +351,7 @@ def one2many_rnn_seq2seq(encoder_inputs,
                         feed_previous=feed_previous,
                         initial_state_attention=initial_state_attention)
                 else:
-                    # If feed_previous is a Tensor, we construct 2 graphs and use cond.
-                    def filled_embedding_rnn_decoder(feed_previous):
-                        """The current decoder with a fixed feed_previous parameter."""
-                        # pylint: disable=cell-var-from-loop
-                        reuse = None if feed_previous else True
-                        vs = variable_scope.get_variable_scope()
-                        with variable_scope.variable_scope(vs, reuse=reuse):
-                            outputs, state = embedding_attention_decoder(
-                                decoder_inputs,
-                                encoder_state,
-                                attention_states,
-                                decoder_cell,
-                                num_decoder_symbols,
-                                embedding_size,
-                                num_heads=num_heads,
-                                output_size=output_size,
-                                output_projection=output_projection,
-                                feed_previous=feed_previous,
-                                initial_state_attention=initial_state_attention)
-                        # pylint: enable=cell-var-from-loop
-                        state_list = [state]
-                        if nest.is_sequence(state):
-                            state_list = nest.flatten(state)
-                        return outputs + state_list
-
-                    outputs_and_state = control_flow_ops.cond(
-                        feed_previous, lambda: filled_embedding_rnn_decoder(True),
-                        lambda: filled_embedding_rnn_decoder(False))
-                    # Outputs length is the same as for decoder inputs.
-                    outputs_len = len(decoder_inputs)
-                    outputs = outputs_and_state[:outputs_len]
-                    state_list = outputs_and_state[outputs_len:]
-                    state = state_list[0]
-                    if nest.is_sequence(encoder_state):
-                        state = nest.pack_sequence_as(
-                            structure=encoder_state, flat_sequence=state_list)
+                    raise NotImplementedError()
             outputs_dict[name] = outputs
             state_dict[name] = state
 
