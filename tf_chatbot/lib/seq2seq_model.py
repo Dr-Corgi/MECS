@@ -384,6 +384,9 @@ class Seq2SeqModel(object):
                 step = 0
                 attention_state = outputs[0]
 
+                def numpy_softmax(x):
+                    return np.exp(x) / np.sum(np.exp(x), axis=0)
+
                 while step < decoder_size and len(result) < self.beam_search_size:
                     step += 1
                     _encoder_state = [beam_[3] for beam_ in beams]
@@ -400,10 +403,16 @@ class Seq2SeqModel(object):
                     _outputs = session.run(output_feed, input_feed)
 
                     _tok_probs, _tok_ids = [], []
-                    for _idx in range(self.beam_search_size):
-                        _tok_prob, _tok_id = tf.nn.top_k(tf.nn.softmax(_outputs[step-1][_idx]), self.beam_search_size)
-                        _tok_probs.append(_tok_prob.eval())
-                        _tok_ids.append(_tok_id.eval())
+
+                    if step == 1:
+                        for _idx in range(self.beam_search_size):
+                            _tok_ids.append(np.random.choice(range(self.target_vocab_size), size=self.beam_search_size, replace=False, p=numpy_softmax(_outputs[step-1][_idx])))
+                            _tok_probs.append(_outputs[step-1][_idx][_tok_ids[_idx]])
+                    else:
+                        for _idx in range(self.beam_search_size):
+                            _tok_prob, _tok_id = tf.nn.top_k(tf.nn.softmax(_outputs[step-1][_idx]), self.beam_search_size)
+                            _tok_probs.append(_tok_prob.eval())
+                            _tok_ids.append(_tok_id.eval())
 
                     new_beams = []
 
@@ -425,7 +434,7 @@ class Seq2SeqModel(object):
                     beams = []
                     for beam_ in new_beams:
                         #if False:
-                        if beam_[2] == data_utils.EOS_ID and len(beam_[1]) > 2:
+                        if beam_[2] == data_utils.EOS_ID:
                             result.append(
                                 (beam_[0], beam_[1][:-1], beam_[2], beam_[3]))
                         else:
