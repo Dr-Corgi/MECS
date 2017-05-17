@@ -30,7 +30,7 @@ _DIGIT_RE = re.compile(r"\d{3,}")
 _ENCODING = "utf8"
 
 
-def DICT_LIST(dic):
+def gen_dict_list(dic):
     return {k: [] for k in dic.keys()}
 
 
