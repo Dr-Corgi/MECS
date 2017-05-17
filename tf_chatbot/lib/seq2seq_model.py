@@ -10,7 +10,7 @@ import tensorflow as tf
 
 import tf_chatbot.lib.data_utils as data_utils
 from tensorflow.contrib.legacy_seq2seq import sequence_loss, attention_decoder
-from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell, EmbeddingWrapper, static_rnn, OutputProjectionWrapper
+from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell, EmbeddingWrapper, static_rnn, OutputProjectionWrapper, static_bidirectional_rnn
 
 
 def _extract_argmax_and_embed(embedding,
@@ -104,6 +104,7 @@ class Seq2SeqModel(object):
                  learning_rate,
                  learning_rate_decay_factor,
                  use_lstm=False,
+                 use_bidirection=True,
                  num_samples=512,
                  use_sample=False,
                  forward_only=False,
@@ -128,9 +129,10 @@ class Seq2SeqModel(object):
         # Sampled softmax only makes sense if we sample less than vocabulary
         # size.
         if num_samples > 0 and num_samples < self.target_vocab_size:
-            w_t = tf.get_variable(
-                "proj_w", [
-                    self.target_vocab_size, size], dtype=dtype)
+            if use_bidirection:
+                w_t = tf.get_variable("proj_w", [self.target_vocab_size, size * 2], dtype=dtype)
+            else:
+                w_t = tf.get_variable("proj_w", [self.target_vocab_size, size], dtype=dtype)
             w = tf.transpose(w_t)
             b = tf.get_variable(
                 "proj_b", [
@@ -187,6 +189,7 @@ class Seq2SeqModel(object):
                     output_projection=None,
                     feed_previous=False,
                     initial_state_attention=False,
+                    use_bidirection=False,
                     dtype=tf.float32):
                 with tf.variable_scope("embedding_attention_sampled_seq2seq"):
                     encoder_cell = EmbeddingWrapper(
@@ -194,8 +197,18 @@ class Seq2SeqModel(object):
                         embedding_classes=num_encoder_symbols,
                         embedding_size=embedding_size
                     )
-                    encoder_outputs, encoder_state = static_rnn(
-                        encoder_cell, encoder_inputs, dtype=dtype)
+                    if not use_bidirection:
+                        encoder_outputs, encoder_state = static_rnn(
+                            encoder_cell, encoder_inputs, dtype=dtype)
+                    else:
+                        encoder_outputs, encoder_state_fw, encoder_state_bw = static_bidirectional_rnn(
+                            cell_fw=encoder_cell,
+                            cell_bw=encoder_cell,
+                            inputs=encoder_inputs,
+                            dtype=dtype)
+                        encoder_state = tf.concat([encoder_state_fw, encoder_state_bw], axis=1)
+
+                        cell = GRUCell(cell.state_size * 2)
 
                     top_states = [tf.reshape(
                         e, [-1, 1, cell.output_size]) for e in encoder_outputs]
@@ -239,7 +252,8 @@ class Seq2SeqModel(object):
                 embedding_size=size,
                 bucket_index=bucket_id,
                 output_projection=output_projection,
-                feed_previous=do_decode)
+                feed_previous=do_decode,
+                use_bidirection=use_bidirection)
 
         # Feeds for inputs.
         self.encoder_inputs = []
