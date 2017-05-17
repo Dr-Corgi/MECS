@@ -56,10 +56,12 @@ def train():
                 bucket_loss[k] += k_loss / FLAGS.steps_per_checkpoint
             current_step += 1
 
-            if current_step % FLAGS.steps_per_checkpoint == 0:
+            if current_step % (FLAGS.steps_per_checkpoint) == 0 or model.global_step.eval() == (epoch_steps * total_epoch):
                 perplexity = {k: math.exp(k_loss) if k_loss < 300 else float('inf') for k,k_loss in bucket_loss.items()}
-                print("global step %d learning rate %.4f step-time %.2f" %
-                      (model.global_step.eval(), model.learning_rate.eval(), step_time))
+                avg_loss = np.mean([k_loss for _, k_loss in bucket_loss.items()])
+                avg_perplexity = math.exp(avg_loss) if avg_loss < 300 else float('inf')
+                print("global step %d learning rate %.4f step-time %.2f perplexity %.2f" %
+                      (model.global_step.eval(), model.learning_rate.eval(), step_time, avg_perplexity))
                 print("   perplexity emotion %s: %.2f\n   perplexity emotion %s: %.2f\n"
                       "   perplexity emotion %s: %.2f\n   perplexity emotion %s: %.2f\n"
                       "   perplexity emotion %s: %.2f\n   perplexity emotion %s: %.2f\n"
@@ -67,7 +69,7 @@ def train():
                          EMOTION_TYPE[2], perplexity[2], EMOTION_TYPE[3], perplexity[3],
                          EMOTION_TYPE[4], perplexity[4], EMOTION_TYPE[5], perplexity[5]))
 
-                avg_loss = np.mean([k_loss for _,k_loss in bucket_loss.items()])
+
 
                 if len(previous_losses) > 2 and avg_loss > max(previous_losses[-3:]):
                     sess.run(model.learning_rate_decay_op)
@@ -75,6 +77,7 @@ def train():
                 previous_losses.append(avg_loss)
 
                 checkpoint_path = os.path.join(FLAGS.model_dir, 'model.ckpt')
+                print("saving model - global step %d ..." % model.global_step.eval())
                 model.saver.save(sess, checkpoint_path, global_step=model.global_step)
                 step_time = 0.0
                 bucket_loss = {k:0.0 for k in EMOTION_TYPE.keys()}

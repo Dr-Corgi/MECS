@@ -33,7 +33,7 @@ def predict():
             print(sentence, '->')
             for i in range(6):
                 print(EMOTION_TYPE[i] + ": ")
-                print(predicted_sentence[i])
+                print("".join(predicted_sentence[i].split(" ")))
             print("  ===========  ")
 
             #results_fh.write(predicted_sentence + '\n')
