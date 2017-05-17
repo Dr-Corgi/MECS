@@ -20,7 +20,7 @@ def predict():
 
     with tf.Session() as sess, open(results_path, 'w') as results_fh:
 
-        model = create_model(sess, forward_only=True)
+        model = create_model(sess, forward_only=True, use_sample=FLAGS.use_sample)
         model.batch_size = 1
 
         vocab_path = os.path.join(FLAGS.data_dir, "vocab%d.in" % FLAGS.vocab_size)
@@ -29,7 +29,7 @@ def predict():
         test_dataset = _get_test_dataset()
 
         for sentence in test_dataset[:10]:
-            predicted_sentence = get_predicted_sentence(sentence, vocab, rev_vocab, model, sess)
+            predicted_sentence = get_predicted_sentence(sentence, vocab, rev_vocab, model, sess, use_beam_search=FLAGS.use_beam_search)
             print(sentence, '->')
             for i in range(6):
                 print(EMOTION_TYPE[i] + ": ")
