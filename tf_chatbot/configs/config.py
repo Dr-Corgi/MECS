@@ -16,9 +16,13 @@ tf.app.flags.DEFINE_integer('epoch_size', 40, 'Size of epoch')
 tf.app.flags.DEFINE_integer('vocab_size', 20000, 'Dialog vocabulary size')
 tf.app.flags.DEFINE_integer('size', 128, 'size of each model layer')
 tf.app.flags.DEFINE_integer('num_layers', 1, 'Numbers of layers in the model')
+tf.app.flags.DEFINE_integer('beam_search_size', 2, 'Size of beam search op')
 
 tf.app.flags.DEFINE_integer('max_train_data_size', 0, 'Limit on the size of training data (0: no limit)')
 tf.app.flags.DEFINE_integer('steps_per_checkpoint', 500, 'How many training steps to do per checkpoint')
+
+tf.app.flags.DEFINE_boolean('use_sample', False, 'use sample while generating')
+tf.app.flags.DEFINE_boolean('use_beam_search', True, 'use beam search while generating')
 
 FLAGS = tf.app.flags.FLAGS
 

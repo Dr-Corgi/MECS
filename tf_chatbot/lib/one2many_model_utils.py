@@ -6,14 +6,14 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.platform import gfile
 
-from tf_chatbot.configs.config import FLAGS, BUCKETS
+from tf_chatbot.configs.config import FLAGS, BUCKETS, EMOTION_TYPE
 from tf_chatbot.lib import data_utils
 #from tf_chatbot.lib import seq2seq_model
 from tf_chatbot.lib import one2many_model
 
 _INDEX = ".index"
 
-def create_model(session, forward_only):
+def create_model(session, forward_only, use_sample=False):
     model = one2many_model.One2ManyModel(
         source_vocab_size=FLAGS.vocab_size,
         target_vocab_size=FLAGS.vocab_size,
@@ -24,7 +24,9 @@ def create_model(session, forward_only):
         batch_size=FLAGS.batch_size,
         learning_rate=FLAGS.learning_rate,
         learning_rate_decay_factor=FLAGS.learning_rate_decay_factor,
+        use_sample=use_sample,
         use_lstm=False,
+        beam_search_size=FLAGS.beam_search_size,
         forward_only=forward_only)
 
     ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
@@ -38,7 +40,7 @@ def create_model(session, forward_only):
         session.run(tf.global_variables_initializer())
     return model
 
-def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess):
+def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_beam_search=False):
     input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
 
     bucket_id = min([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
@@ -47,17 +49,41 @@ def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess):
     feed_data = {bucket_id: [(input_token_ids, outputs)]}
     encoder_inputs, decoder_inputs, target_weights = model.get_batch(feed_data, bucket_id)
 
-    _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
+    if use_beam_search:
+        new_encoder_inputs = []
+        new_decoder_inputs = data_utils.gen_dict_list(EMOTION_TYPE)
+        new_target_weights = data_utils.gen_dict_list(EMOTION_TYPE)
+        for _emo_key, _emo_arrays in decoder_inputs.items():
+            for _array in _emo_arrays:
+                for _item in _array:
+                    _de_input = np.array([_item] * FLAGS.beam_search_size, dtype=np.int32)
+                    new_decoder_inputs[_emo_key].append(_de_input)
+        for _array in encoder_inputs:
+            for _item in _array:
+                _en_input = np.array([_item] * FLAGS.beam_search_size, dtype=np.int32)
+                new_encoder_inputs.append(_en_input)
+        for _emo_key, _emo_arrays in target_weights.items():
+            for _array in _emo_arrays:
+                for _item in _array:
+                    _ta_input = np.array([_item] * FLAGS.beam_search_size, dtype=np.int32)
+                    new_target_weights[_emo_key].append(_ta_input)
 
-    output_sentences = {}
-    for j in range(6):
-        for logit in output_logits[j]:
-            selected_token_id = int(np.argmax(logit, axis=1))
-            if selected_token_id == data_utils.EOS_ID:
-                break
-            else:
-                outputs[j].append(selected_token_id)
-        #print(outputs[j])
-        output_sentences[j] = " ".join([rev_vocab[output] for output in outputs[j]])
+        _, _, output_words = model.step(sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id, forward_only=True, use_beam_search=True)
+        output_sentences = {}
+        for j in range(6):
+            output_sentences[j] = " ".join([rev_vocab[tok_id] for tok_id in output_words[j]])
+
+    else:
+        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True, use_beam_search=False)
+
+        output_sentences = {}
+        for j in range(6):
+            for logit in output_logits[j]:
+                selected_token_id = int(np.argmax(logit, axis=1))
+                if selected_token_id == data_utils.EOS_ID:
+                    break
+                else:
+                    outputs[j].append(selected_token_id)
+            output_sentences[j] = " ".join([rev_vocab[output] for output in outputs[j]])
 
     return output_sentences

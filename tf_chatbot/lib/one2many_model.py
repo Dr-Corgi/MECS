@@ -3,9 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import random
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import variable_scope
-from tensorflow.contrib.legacy_seq2seq import sequence_loss_by_example, sequence_loss, embedding_attention_decoder
+from tensorflow.contrib.legacy_seq2seq import sequence_loss, embedding_attention_decoder
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.rnn import GRUCell, BasicLSTMCell, MultiRNNCell, EmbeddingWrapper, static_rnn, OutputProjectionWrapper
@@ -26,7 +24,9 @@ class One2ManyModel(object):
                  learning_rate_decay_factor,
                  use_lstm=False,
                  num_samples=512,
+                 use_sample=False,
                  forward_only=False,
+                 beam_search_size=1,
                  dtype=tf.float32):
 
         self.source_vocab_size = source_vocab_size
@@ -38,6 +38,8 @@ class One2ManyModel(object):
         self.learning_rate_decay_op = self.learning_rate.assign(
             self.learning_rate * learning_rate_decay_factor)
         self.global_step = tf.Variable(0, trainable=False)
+        self.beam_search_size = beam_search_size
+        self.use_sample = use_sample
 
         # If we use sampled softmax, we need an output projection.
         output_projection = None
@@ -78,16 +80,20 @@ class One2ManyModel(object):
         if num_layers > 1:
             cell = MultiRNNCell([single_cell() for _ in range(num_layers)])
 
-        def one2many_f(encoder_inputs, decoder_input_dict, do_decode):
+        self.model_encoder_states = {emo_idx:{} for emo_idx in EMOTION_TYPE.keys()}
+        self.model_attention_states = {emo_idx:{} for emo_idx in EMOTION_TYPE.keys()}
+
+        def one2many_f(encoder_inputs, decoder_input_dict, do_decode, bucket_id):
             num_decoder_symbols_dict = {0: target_vocab_size, 1: target_vocab_size, 2: target_vocab_size,
                                         3: target_vocab_size, 4: target_vocab_size, 5: target_vocab_size}
-            return one2many_rnn_seq2seq(
+            return self.one2many_rnn_seq2seq(
                 encoder_inputs=encoder_inputs,
                 decoder_inputs_dict=decoder_input_dict,
                 cell=cell,
                 num_encoder_symbols=source_vocab_size,
                 num_decoder_symbols_dict=num_decoder_symbols_dict,
                 embedding_size=size,
+                bucket_index=bucket_id,
                 feed_previous=do_decode,
                 output_projection=output_projection,
                 dtype=tf.float32
@@ -95,8 +101,8 @@ class One2ManyModel(object):
 
         # Feeds for inputs
         self.encoder_inputs = []
-        self.decoder_inputs_dict = data_utils.DICT_LIST(EMOTION_TYPE)
-        self.target_weights = data_utils.DICT_LIST(EMOTION_TYPE)
+        self.decoder_inputs_dict = data_utils.gen_dict_list(EMOTION_TYPE)
+        self.target_weights_dict = data_utils.gen_dict_list(EMOTION_TYPE)
 
         for i in range(buckets[-1][0]):
             self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
@@ -105,38 +111,54 @@ class One2ManyModel(object):
             for i in range(buckets[-1][1] + 1):
                 self.decoder_inputs_dict[j].append(tf.placeholder(tf.int32, shape=[None],
                                                                   name="decoder{0}_{1}".format(i, j)))
-                self.target_weights[j].append(tf.placeholder(dtype, shape=[None],
-                                                             name="weight{0}_{1}".format(i, j)))
+                self.target_weights_dict[j].append(tf.placeholder(dtype, shape=[None],
+                                                                  name="weight{0}_{1}".format(i, j)))
 
         # targets are decoder inputs shifted by one
-        targets = data_utils.DICT_LIST(EMOTION_TYPE)
+        targets = data_utils.gen_dict_list(EMOTION_TYPE)
         for j in range(len(EMOTION_TYPE)):
             targets[j] = [self.decoder_inputs_dict[j][i + 1]
                           for i in range(len(self.decoder_inputs_dict[j]) - 1)]
 
-        if forward_only:
-            self.outputs, self.losses = model_with_buckets(
-                self.encoder_inputs, self.decoder_inputs_dict,
-                targets, self.target_weights, buckets, lambda x, y: one2many_f(x, y, True),
-                softmax_loss_function=softmax_loss_function)
-            if output_projection is not None:
-                for b in range(len(buckets)):
-                    for j in range(len(EMOTION_TYPE)):
-                        self.outputs[j][b] = [
-                            tf.matmul(output, output_projection[0]) + output_projection[1]
-                            for output in self.outputs[j][b]]
+        with tf.variable_scope("model_with_buckets"):
+            self.outputs = data_utils.gen_dict_list(EMOTION_TYPE)
+            self.losses = data_utils.gen_dict_list(EMOTION_TYPE)
+            for bucket_id, bucket in enumerate(buckets):
+                with tf.variable_scope(tf.get_variable_scope(), reuse=True if bucket_id > 0 else None):
+                    emo_decoder_inputs = {}
+                    for emo_idx in range(len(EMOTION_TYPE)):
+                        emo_decoder_inputs[emo_idx] = self.decoder_inputs_dict[emo_idx][:bucket[1]]
+                    if forward_only:
+                        bucket_outputs, _ = one2many_f(self.encoder_inputs[:bucket[0]],
+                                                        emo_decoder_inputs,
+                                                        True,
+                                                        bucket_id)
+                    else:
+                        bucket_outputs, _ = one2many_f(self.encoder_inputs[:bucket[0]],
+                                                        emo_decoder_inputs,
+                                                        False,
+                                                        bucket_id)
 
-        else:
-            self.outputs, self.losses = model_with_buckets(
-                self.encoder_inputs, self.decoder_inputs_dict, targets,
-                self.target_weights, buckets,
-                lambda x, y: one2many_f(x, y, False),
-                softmax_loss_function=softmax_loss_function)
+                    for emo_idx in range(len(EMOTION_TYPE)):
+                        self.outputs[emo_idx].append(bucket_outputs[emo_idx])
+                    for emo_idx in range(len(EMOTION_TYPE)):
+                        self.losses[emo_idx].append(
+                            sequence_loss(self.outputs[emo_idx][-1],
+                                            targets[emo_idx][:bucket[1]],
+                                            self.target_weights_dict[emo_idx][:bucket[1]],
+                                            softmax_loss_function=softmax_loss_function))
+
+        if forward_only and output_projection is not None:
+            for b in range(len(buckets)):
+                for j in range(len(EMOTION_TYPE)):
+                    self.outputs[j][b] = [
+                        tf.matmul(output, output_projection[0]) + output_projection[1]
+                        for output in self.outputs[j][b]]
 
         params = tf.trainable_variables()
         if not forward_only:
-            self.gradient_norms = data_utils.DICT_LIST(EMOTION_TYPE)
-            self.updates = data_utils.DICT_LIST(EMOTION_TYPE)
+            self.gradient_norms = data_utils.gen_dict_list(EMOTION_TYPE)
+            self.updates = data_utils.gen_dict_list(EMOTION_TYPE)
             opt = tf.train.GradientDescentOptimizer(self.learning_rate)
             for b in range(len(buckets)):
                 for j in range(len(EMOTION_TYPE)):
@@ -156,7 +178,7 @@ class One2ManyModel(object):
     def get_batch(self, data, bucket_id):
         encoder_size, decoder_size = self.buckets[bucket_id]
         encoder_inputs = []
-        decoder_inputs = data_utils.DICT_LIST(EMOTION_TYPE)
+        decoder_inputs = data_utils.gen_dict_list(EMOTION_TYPE)
 
         for _ in range(self.batch_size):
             encoder_input, decoder_input = random.choice(data[bucket_id])
@@ -170,8 +192,8 @@ class One2ManyModel(object):
                                          [data_utils.PAD_ID] * decoder_pad_size)
 
         batch_encoder_inputs = []
-        batch_decoder_inputs = data_utils.DICT_LIST(EMOTION_TYPE)
-        batch_weights = data_utils.DICT_LIST(EMOTION_TYPE)
+        batch_decoder_inputs = data_utils.gen_dict_list(EMOTION_TYPE)
+        batch_weights = data_utils.gen_dict_list(EMOTION_TYPE)
 
         for length_idx in range(encoder_size):
             batch_encoder_inputs.append(
@@ -195,7 +217,7 @@ class One2ManyModel(object):
         return batch_encoder_inputs, batch_decoder_inputs, batch_weights
 
     def step(self, session, encoder_inputs, decoder_inputs_dict, target_weights_dict,
-             bucket_id, forward_only):
+             bucket_id, forward_only, use_beam_search=False):
         encoder_size, decoder_size = self.buckets[bucket_id]
         if len(encoder_inputs) != encoder_size:
             raise ValueError("Encoder length must be equal to the one in bucket,"
@@ -214,7 +236,7 @@ class One2ManyModel(object):
         for j in range(len(EMOTION_TYPE)):
             for l in range(decoder_size):
                 input_feed[self.decoder_inputs_dict[j][l].name] = decoder_inputs_dict[j][l]
-                input_feed[self.target_weights[j][l].name] = target_weights_dict[j][l]
+                input_feed[self.target_weights_dict[j][l].name] = target_weights_dict[j][l]
 
             last_target = self.decoder_inputs_dict[j][decoder_size].name
             input_feed[last_target] = np.zeros([self.batch_size], dtype=np.int32)
@@ -226,133 +248,167 @@ class One2ManyModel(object):
             output_feed = [updates_feed,
                            gnorm_feed,
                            loss_feed]
-        else:
-            loss_feed = {j: self.losses[j][bucket_id] for j in range(len(EMOTION_TYPE))}
-            pred_feed = {j: self.outputs[j][bucket_id] for j in range(len(EMOTION_TYPE))}
-            output_feed = [loss_feed, pred_feed]
-
-        outputs = session.run(output_feed, input_feed)
-        if not forward_only:
+            outputs = session.run(output_feed, input_feed)
             return outputs[1], outputs[2], None
         else:
-            return None, outputs[0], outputs[1]
+            if use_beam_search:
+                output_feed = [self.model_attention_states[bucket_id],
+                               self.model_encoder_states[bucket_id]]
+                outputs = session.run(output_feed, input_feed)
+
+                beams = {emo_idx: [(0.0, [data_utils.GO_ID], data_utils.GO_ID)] * self.beam_search_size for emo_idx in EMOTION_TYPE.keys()}
+
+                result = data_utils.gen_dict_list(EMOTION_TYPE)
+
+                def numpy_softmax(x):
+                    return np.exp(x) / np.sum(np.exp(x), axis=0)
+
+                input_feed = {}
+                input_feed[self.model_attention_states[bucket_id].name] = outputs[0]
+                input_feed[self.model_encoder_states[bucket_id].name] = outputs[1]
+                step = 0
+                run_flag = True
+
+                while step < decoder_size and run_flag:
+                    step += 1
+                    output_feed = []
+
+                    for emo_idx in EMOTION_TYPE.keys():
+                        output_feed.append(self.outputs[emo_idx][bucket_id])
+
+                        for l in range(step):
+                            _emo_decoder_inputs = np.array([beam_[1][l] for beam_ in beams[emo_idx]])
+                            input_feed[self.decoder_inputs_dict[emo_idx][l].name] = _emo_decoder_inputs
+
+                    _outputs = session.run(output_feed, input_feed)
+
+                    _tok_probs = data_utils.gen_dict_list(EMOTION_TYPE)
+                    _tok_ids = data_utils.gen_dict_list(EMOTION_TYPE)
+
+                    for emo_idx in EMOTION_TYPE.keys():
+                        if step == 1:
+                            for _idx in range(self.beam_search_size):
+                                _tok_ids[emo_idx].append(np.random.choice(range(self.target_vocab_size), size=self.beam_search_size, replace=False, p=numpy_softmax(_outputs[emo_idx][step-1][_idx])))
+                                _tok_probs[emo_idx].append(_outputs[emo_idx][step-1][_idx][_tok_ids[emo_idx][_idx]])
+
+                        else:
+                            for _idx in range(self.beam_search_size):
+                                _tok_prob, _tok_id = tf.nn.top_k(tf.nn.softmax(_outputs[emo_idx][step-1][_idx]), self.beam_search_size)
+                                _tok_probs[emo_idx].append(_tok_prob.eval())
+                                _tok_ids[emo_idx].append(_tok_id.eval())
+
+                    new_beams = data_utils.gen_dict_list(EMOTION_TYPE)
+
+                    for emo_idx in EMOTION_TYPE.keys():
+                        for beam_idx in range(self.beam_search_size):
+                            for _idx in range(self.beam_search_size):
+                                new_beams[emo_idx].append(
+                                    (beams[emo_idx][beam_idx][0] + _tok_probs[emo_idx][beam_idx][_idx],
+                                     beams[emo_idx][beam_idx][1] + [_tok_ids[emo_idx][beam_idx][_idx]],
+                                     _tok_ids[emo_idx][beam_idx][_idx]))
+
+                        new_beams[emo_idx].sort(key=lambda x:x[0], reverse=True)
+
+                    unduplicate_set_dict = {emo_idx : set() for emo_idx in EMOTION_TYPE.keys()}
+                    beams = data_utils.gen_dict_list(EMOTION_TYPE)
+
+                    for emo_idx in EMOTION_TYPE.keys():
+                        for beam_ in new_beams[emo_idx]:
+                            if beam_[2] == data_utils.EOS_ID:
+                                result[emo_idx].append((beam_[0], beam_[1][:-1], beam_[2]))
+                            else:
+                                if str(beam_[1]) not in unduplicate_set_dict[emo_idx]:
+                                    unduplicate_set_dict[emo_idx].add(str(beam_[1]))
+                                    beams[emo_idx].append(beam_)
+                                if len(beams[emo_idx]) == self.beam_search_size:
+                                    break
+
+                        beams[emo_idx] = beams[emo_idx][:self.beam_search_size]
 
 
-def model_with_buckets(encoder_inputs,
-                       decoder_inputs,
-                       targets,
-                       weights,
-                       buckets,
-                       seq2seq,
-                       softmax_loss_function=None,
-                       per_example_loss=False,
-                       name=None):
-    if len(encoder_inputs) < buckets[-1][0]:
-        raise ValueError("Length of encoder_inputs (%d) must be at least that of la"
-                         "st bucket (%d)." % (len(encoder_inputs), buckets[-1][0]))
-    for j in range(len(EMOTION_TYPE)):
-        if len(targets[j]) < buckets[-1][1]:
-            raise ValueError("Length of targets[%d] (%d) must be at least that of last"
-                             "bucket (%d)." % (j, len(targets[j]), buckets[-1][1]))
-        if len(weights[j]) < buckets[-1][1]:
-            raise ValueError("Length of weights[%d] (%d) must be at least that of last"
-                             "bucket (%d)." % (j, len(weights[j]), buckets[-1][1]))
-    all_decoder_inputs = []
-    all_targets = []
-    all_weights = []
-    for i in range(len(EMOTION_TYPE)):
-        all_decoder_inputs.append(decoder_inputs[i])
-        all_targets.append(targets[i])
-        all_weights.append(weights[i])
-    # all_inputs = encoder_inputs + decoder_inputs + targets + weights
-    all_inputs = encoder_inputs + all_decoder_inputs + all_targets + all_weights
-    losses = data_utils.DICT_LIST(EMOTION_TYPE)
-    outputs = data_utils.DICT_LIST(EMOTION_TYPE)
-    #with ops.name_scope(name, "model_with_buckets", all_inputs):
-    with tf.variable_scope(name, "model_with_buckets", all_inputs):
-        for j, bucket in enumerate(buckets):
-            with tf.variable_scope(tf.get_variable_scope(), reuse=True if j > 0 else None):
-                cut_decoder_inputs = {}
-                for i in range(len(EMOTION_TYPE)):
-                    cut_decoder_inputs[i] = decoder_inputs[i][:bucket[1]]
-                bucket_outputs, _ = seq2seq(encoder_inputs[:bucket[0]],
-                                            cut_decoder_inputs)
-                # outputs.append(bucket_outputs)
-                for i in range(len(EMOTION_TYPE)):
-                    outputs[i].append(bucket_outputs[i])
-                for i in range(len(EMOTION_TYPE)):
-                    if per_example_loss:
-                        losses[i].append(
-                            sequence_loss_by_example(
-                                outputs[i][-1],
-                                targets[i][:bucket[1]],
-                                weights[i][:bucket[1]],
-                                softmax_loss_function=softmax_loss_function))
+                        if step == decoder_size:
+                            for beam_ in new_beams[emo_idx]:
+                                if len(result[emo_idx]) == self.beam_search_size:
+                                    break
+                                result[emo_idx].append(beam_)
+
+                    if sum([1 for emo_idx in EMOTION_TYPE  if len(result[emo_idx]) >= len(EMOTION_TYPE)]) == 6:
+                        run_flag = False
+
+                outputs = {emo_idx: result[emo_idx][0][1] for emo_idx in EMOTION_TYPE.keys()}
+                return None, None, outputs
+            else:
+                loss_feed = {j: self.losses[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+                pred_feed = {j: self.outputs[j][bucket_id] for j in range(len(EMOTION_TYPE))}
+                output_feed = [loss_feed, pred_feed]
+
+                outputs = session.run(output_feed, input_feed)
+                return None, outputs[0], outputs[1]
+
+    def one2many_rnn_seq2seq(self,
+                             encoder_inputs,
+                             decoder_inputs_dict,
+                             cell,
+                             num_encoder_symbols,
+                             num_decoder_symbols_dict,
+                             embedding_size,
+                             bucket_index,
+                             num_heads=1,
+                             output_projection=None,
+                             feed_previous=False,
+                             dtype=None,
+                             scope=None,
+                             initial_state_attention=False):
+        outputs_dict = {}
+        state_dict = {}
+
+        with tf.variable_scope("one2many_rnn_seq2seq"):
+            encoder_cell = EmbeddingWrapper(
+                cell,
+                embedding_classes=num_encoder_symbols,
+                embedding_size=embedding_size)
+            encoder_outputs, encoder_state = static_rnn(
+                encoder_cell, encoder_inputs, dtype=dtype)
+
+            top_states = [
+                tf.reshape(e, [-1, 1, cell.output_size]) for e in encoder_outputs
+            ]
+            attention_states = tf.concat(top_states, 1)
+
+            #for emo_idx in EMOTION_TYPE.keys():
+            self.model_encoder_states[bucket_index] = encoder_state
+                #self.model_encoder_states[emo_idx][bucket_index].name = encoder_state.name+"_emo"+str(emo_idx)
+            self.model_attention_states[bucket_index] = attention_states
+                #self.model_attention_states[emo_idx][bucket_index].name = encoder_state.name+"_emo"+str(emo_idx)
+
+            # Decoder.
+            for name, decoder_inputs in decoder_inputs_dict.items():
+                num_decoder_symbols = num_decoder_symbols_dict[name]
+
+                with tf.variable_scope("one2many_decoder_" + str(name)):
+                    output_size = None
+                    decoder_cell = cell
+                    if output_projection is None:
+                        decoder_cell = OutputProjectionWrapper(cell, num_decoder_symbols)
+                        output_size = num_decoder_symbols
+                    if isinstance(feed_previous, bool):
+                        outputs, state = embedding_attention_decoder(
+                            decoder_inputs,
+                            #encoder_state,
+                            self.model_encoder_states[bucket_index],
+                            #attention_states,
+                            self.model_attention_states[bucket_index],
+                            decoder_cell,
+                            num_decoder_symbols,
+                            embedding_size,
+                            num_heads=num_heads,
+                            output_size=output_size,
+                            output_projection=output_projection,
+                            feed_previous=feed_previous,
+                            initial_state_attention=initial_state_attention)
                     else:
-                        losses[i].append(
-                            sequence_loss(
-                                outputs[i][-1],
-                                targets[i][:bucket[1]],
-                                weights[i][:bucket[1]],
-                                softmax_loss_function=softmax_loss_function))
+                        raise NotImplementedError()
+                outputs_dict[name] = outputs
+                state_dict[name] = state
 
-    return outputs, losses
-
-
-def one2many_rnn_seq2seq(encoder_inputs,
-                         decoder_inputs_dict,
-                         cell,
-                         num_encoder_symbols,
-                         num_decoder_symbols_dict,
-                         embedding_size,
-                         num_heads=1,
-                         output_projection=None,
-                         feed_previous=False,
-                         dtype=None,
-                         scope=None,
-                         initial_state_attention=False):
-    outputs_dict = {}
-    state_dict = {}
-
-    with tf.variable_scope("one2many_rnn_seq2seq"):
-        encoder_cell = EmbeddingWrapper(
-            cell,
-            embedding_classes=num_encoder_symbols,
-            embedding_size=embedding_size)
-        encoder_outputs, encoder_state = static_rnn(
-            encoder_cell, encoder_inputs, dtype=dtype)
-
-        top_states = [
-            tf.reshape(e, [-1, 1, cell.output_size]) for e in encoder_outputs
-        ]
-        attention_states = tf.concat(top_states, 1)
-
-        # Decoder.
-        for name, decoder_inputs in decoder_inputs_dict.items():
-            num_decoder_symbols = num_decoder_symbols_dict[name]
-
-            with tf.variable_scope("one2many_decoder_" + str(name)):
-                output_size = None
-                if output_projection is None:
-                    decoder_cell = OutputProjectionWrapper(cell, num_decoder_symbols)
-                    output_size = num_decoder_symbols
-                decoder_cell = cell
-                if isinstance(feed_previous, bool):
-                    outputs, state = embedding_attention_decoder(
-                        decoder_inputs,
-                        encoder_state,
-                        attention_states,
-                        decoder_cell,
-                        num_decoder_symbols,
-                        embedding_size,
-                        num_heads=num_heads,
-                        output_size=output_size,
-                        output_projection=output_projection,
-                        feed_previous=feed_previous,
-                        initial_state_attention=initial_state_attention)
-                else:
-                    raise NotImplementedError()
-            outputs_dict[name] = outputs
-            state_dict[name] = state
-
-    return outputs_dict, state_dict
+        return outputs_dict, state_dict
