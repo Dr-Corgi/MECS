@@ -20,7 +20,11 @@ def predict():
 
     with tf.Session() as sess, open(results_path, 'w') as results_fh:
 
-        model = create_model(sess, forward_only=True, use_sample=FLAGS.use_sample)
+        #model = create_model(sess, forward_only=True, use_sample=FLAGS.use_sample)
+        if FLAGS.use_beam_search:
+            model = create_model(sess, forward_only=False, beam_forward_only=True, use_sample=FLAGS.use_sample)
+        else:
+            model = create_model(sess, forward_only=True, use_sample=FLAGS.use_sample)
         model.batch_size = 1
 
         vocab_path = os.path.join(FLAGS.data_dir, "vocab%d.in" % FLAGS.vocab_size)

@@ -26,6 +26,7 @@ class One2ManyModel(object):
                  num_samples=512,
                  use_sample=False,
                  forward_only=False,
+                 beam_forward_only=True,
                  beam_search_size=1,
                  dtype=tf.float32):
 
@@ -148,7 +149,7 @@ class One2ManyModel(object):
                                             self.target_weights_dict[emo_idx][:bucket[1]],
                                             softmax_loss_function=softmax_loss_function))
 
-        if forward_only and output_projection is not None:
+        if forward_only or beam_forward_only and output_projection is not None:
             for b in range(len(buckets)):
                 for j in range(len(EMOTION_TYPE)):
                     self.outputs[j][b] = [
@@ -156,7 +157,7 @@ class One2ManyModel(object):
                         for output in self.outputs[j][b]]
 
         params = tf.trainable_variables()
-        if not forward_only:
+        if not forward_only and not beam_forward_only:
             self.gradient_norms = data_utils.gen_dict_list(EMOTION_TYPE)
             self.updates = data_utils.gen_dict_list(EMOTION_TYPE)
             opt = tf.train.GradientDescentOptimizer(self.learning_rate)
@@ -281,6 +282,10 @@ class One2ManyModel(object):
                             _emo_decoder_inputs = np.array([beam_[1][l] for beam_ in beams[emo_idx]])
                             input_feed[self.decoder_inputs_dict[emo_idx][l].name] = _emo_decoder_inputs
 
+                        for l in range(step, decoder_size):
+                            _emo_decoder_inputs = np.array([data_utils.PAD_ID for i in range(len(beams[emo_idx]))])
+                            input_feed[self.decoder_inputs_dict[emo_idx][l].name] = _emo_decoder_inputs
+
                     _outputs = session.run(output_feed, input_feed)
 
                     _tok_probs = data_utils.gen_dict_list(EMOTION_TYPE)
@@ -294,17 +299,17 @@ class One2ManyModel(object):
 
                         else:
                             for _idx in range(self.beam_search_size):
-                                #_tok_ids[emo_idx].append(
-                                #    np.random.choice(range(self.target_vocab_size), size=self.beam_search_size,
-                                #                     replace=False, p=numpy_softmax(_outputs[emo_idx][step - 1][_idx])))
-                                #_tok_probs[emo_idx].append(_outputs[emo_idx][step - 1][_idx][_tok_ids[emo_idx][_idx]])
+                                _tok_ids[emo_idx].append(
+                                    np.random.choice(range(self.target_vocab_size), size=self.beam_search_size,
+                                                     replace=False, p=numpy_softmax(_outputs[emo_idx][step - 1][_idx])))
+                                _tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step - 1][_idx][_tok_ids[emo_idx][_idx]]))
 
                                 #_tok_prob, _tok_id = tf.nn.top_k(tf.nn.softmax(_outputs[emo_idx][step-1][_idx]), self.beam_search_size)
                                 #_tok_probs[emo_idx].append(_tok_prob.eval())
                                 #_tok_ids[emo_idx].append(_tok_id.eval())
 
-                                _tok_ids[emo_idx].append(np.argsort(_outputs[emo_idx][step-1][_idx])[-self.beam_search_size:][::-1])
-                                _tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step-1][_idx][_tok_ids[emo_idx][_idx]]))
+                                #_tok_ids[emo_idx].append(np.argsort(_outputs[emo_idx][step-1][_idx])[-self.beam_search_size:][::-1])
+                                #_tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step-1][_idx][_tok_ids[emo_idx][_idx]]))
 
                     new_beams = data_utils.gen_dict_list(EMOTION_TYPE)
 

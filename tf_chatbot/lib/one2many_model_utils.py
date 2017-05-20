@@ -13,7 +13,7 @@ from tf_chatbot.lib import one2many_model
 
 _INDEX = ".index"
 
-def create_model(session, forward_only, use_sample=False):
+def create_model(session, forward_only, beam_forward_only=False, use_sample=False):
     model = one2many_model.One2ManyModel(
         source_vocab_size=FLAGS.vocab_size,
         target_vocab_size=FLAGS.vocab_size,
@@ -26,6 +26,7 @@ def create_model(session, forward_only, use_sample=False):
         learning_rate_decay_factor=FLAGS.learning_rate_decay_factor,
         use_sample=use_sample,
         use_lstm=False,
+        beam_forward_only=beam_forward_only,
         beam_search_size=FLAGS.beam_search_size,
         forward_only=forward_only)
 
