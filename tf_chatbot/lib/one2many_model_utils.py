@@ -43,7 +43,8 @@ def create_model(session, forward_only, use_sample=False):
 def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_beam_search=False):
     input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
 
-    bucket_id = min([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
+    #bucket_id = min([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
+    bucket_id = np.random.choice([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
     outputs = {0:[],1:[],2:[],3:[],4:[],5:[]}
 
     feed_data = {bucket_id: [(input_token_ids, outputs)]}
@@ -71,7 +72,7 @@ def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_be
         _, _, output_words = model.step(sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id, forward_only=True, use_beam_search=True)
         output_sentences = {}
         for j in range(6):
-            output_sentences[j] = " ".join([rev_vocab[tok_id] for tok_id in output_words[j]])
+            output_sentences[j] = " ".join([rev_vocab[tok_id] for tok_id in output_words[j][0]])+"["+str(output_words[j][1])+"]"
 
     else:
         _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True, use_beam_search=False)
