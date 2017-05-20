@@ -28,7 +28,7 @@ def predict():
 
         test_dataset = _get_test_dataset()
 
-        for sentence in test_dataset[:10]:
+        for sentence in test_dataset[20:]:
             predicted_sentence = get_predicted_sentence(sentence, vocab, rev_vocab, model, sess, use_beam_search=FLAGS.use_beam_search)
             print(sentence, '->')
             for i in range(6):
