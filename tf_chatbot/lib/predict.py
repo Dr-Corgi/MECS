@@ -32,12 +32,19 @@ def predict():
 
         test_dataset = _get_test_dataset()
 
-        for sentence in test_dataset[20:]:
+        for sentence in test_dataset:
             predicted_sentence = get_predicted_sentence(sentence, vocab, rev_vocab, model, sess, use_beam_search=FLAGS.use_beam_search)
-            print(sentence, '->')
+            print("".join(sentence.strip().split(" ")), '->')
             for i in range(6):
                 print(EMOTION_TYPE[i] + ": ")
                 print("".join(predicted_sentence[i].split(" ")))
-            print("  ===========  ")
+
+            results_fh.write("".join(sentence.strip().split(" ")) + "\n")
+            for i in range(6):
+                results_fh.write(EMOTION_TYPE[i])
+                results_fh.write(" -> ")
+                results_fh.write("".join(predicted_sentence[i].split(" ")))
+                results_fh.write("\n")
+            results_fh.write("\n")
 
             #results_fh.write(predicted_sentence + '\n')

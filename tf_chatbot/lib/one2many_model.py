@@ -334,7 +334,7 @@ class One2ManyModel(object):
                     for emo_idx in EMOTION_TYPE.keys():
                         for beam_ in new_beams[emo_idx]:
                             if beam_[2] == data_utils.EOS_ID:
-                                result[emo_idx].append((beam_[0] / (len(beam_[1])-2), beam_[1][1:-1], beam_[2]))
+                                result[emo_idx].append((beam_[0] / (len(beam_[1])-1), beam_[1][1:-1], beam_[2]))
                             else:
                                 if str(beam_[1]) not in unduplicate_set_dict[emo_idx]:
                                     unduplicate_set_dict[emo_idx].add(str(beam_[1]))
