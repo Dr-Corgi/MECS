@@ -30,6 +30,8 @@ def create_model(session, forward_only, beam_forward_only=False, use_sample=Fals
         beam_search_size=FLAGS.beam_search_size,
         forward_only=forward_only)
 
+    print("create model success!")
+
     ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
     if ckpt and gfile.Exists(ckpt.model_checkpoint_path + _INDEX):
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -44,8 +46,8 @@ def create_model(session, forward_only, beam_forward_only=False, use_sample=Fals
 def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_beam_search=False):
     input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
 
-    #bucket_id = min([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
-    bucket_id = np.random.choice([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
+    bucket_id = min([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
+    #bucket_id = np.random.choice([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
     outputs = {0:[],1:[],2:[],3:[],4:[],5:[]}
 
     feed_data = {bucket_id: [(input_token_ids, outputs)]}

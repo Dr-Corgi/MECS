@@ -125,12 +125,13 @@ def data_to_token_ids(data_path, target_path, vocabulary_path,
         with gfile.GFile(target_path, mode='w') as tokens_file:
             data = json.load(open(data_path))
             counter = 0
-            for ((q,qe),(a_0,ae_0),(a_1,ae_1),(a_2,ae_2),(a_3,ae_3),(a_4,ae_4),(a_5,ae_5)) in data:
+            for ((q,qe, q_oh),(a_0,ae_0),(a_1,ae_1),(a_2,ae_2),(a_3,ae_3),(a_4,ae_4),(a_5,ae_5)) in data:
                 counter += 1
                 if counter % 50000 == 0:
                     print("  Data_to_token_ids: tokenizing line %d" % counter)
                 token_ids_q = sentence_to_token_ids(q, vocab, tokenizer, normalize_digits)
                 tokens_file.write(" ".join([str(tok) for tok in token_ids_q]) + '\n')
+                tokens_file.write(" ".join(str(oh) for oh in q_oh) + '\n')
                 token_ids_a0 = sentence_to_token_ids(a_0, vocab, tokenizer, normalize_digits)
                 tokens_file.write(" ".join([str(tok) for tok in token_ids_a0]) + '\n')
                 token_ids_a1 = sentence_to_token_ids(a_1, vocab, tokenizer, normalize_digits)
@@ -167,13 +168,14 @@ def read_data(tokenized_dialog_path, max_size=None):
 
     with gfile.GFile(tokenized_dialog_path, mode='r') as fh:
         counter = 0
-        source, emo0,emo1,emo2,emo3,emo4,emo5 = fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline()
-        while source and emo0 and emo1 and emo2 and emo3 and emo4 and emo5 and (not max_size or counter < max_size):
+        source, soh, emo0,emo1,emo2,emo3,emo4,emo5 = fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(), fh.readline()
+        while source and soh and emo0 and emo1 and emo2 and emo3 and emo4 and emo5 and (not max_size or counter < max_size):
             counter += 1
             if counter % 100000 == 0:
                 print("  reading data line %d" % counter)
 
             source_ids = [int(x) for x in source.split()]
+            source_ohs = [float(x) for x in soh.strip().split(" ")]
             emo0_ids = [int(x) for x in emo0.split(" ")]+[EOS_ID]
             emo1_ids = [int(x) for x in emo1.split(" ")]+[EOS_ID]
             emo2_ids = [int(x) for x in emo2.split(" ")]+[EOS_ID]
@@ -188,8 +190,13 @@ def read_data(tokenized_dialog_path, max_size=None):
 
             for bucket_id, (source_size, target_size) in enumerate(BUCKETS):
                 if len(source_ids) < source_size and target_maxlen < target_size:
-                    data_set[bucket_id].append([source_ids, target])
+                    data_set[bucket_id].append([source_ids, source_ohs, target])
                     break
-            source, emo0,emo1,emo2,emo3,emo4,emo5 = fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline()
+            source, soh, emo0,emo1,emo2,emo3,emo4,emo5 = fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(),fh.readline(), fh.readline()
 
     return data_set
+
+if __name__ == "__main__":
+    #prepare_dialog_data("../data/", 20000)
+    dat = read_data("../data/dev_data.ids20000.in")
+    print(dat[0])
