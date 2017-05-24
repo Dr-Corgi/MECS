@@ -369,6 +369,7 @@ class One2ManyModel(object):
                 input_feed = {}
                 input_feed[self.model_attention_states[bucket_id].name] = outputs[0]
                 input_feed[self.model_encoder_states[bucket_id].name] = outputs[1]
+                input_feed[self.da_initial_state.name] = encoder_topics
                 step = 0
                 run_flag = True
 
