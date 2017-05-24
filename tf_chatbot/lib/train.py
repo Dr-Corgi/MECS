@@ -44,10 +44,10 @@ def train():
                              if train_buckets_scale[i] > random_number_01])
 
             start_time = time.time()
-            encoder_inputs, decoder_inputs_dict, target_weights_dict = model.get_batch(
+            encoder_inputs, encoder_topics, decoder_inputs_dict, target_weights_dict = model.get_batch(
                 train_set, bucket_id)
 
-            _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs_dict,
+            _, step_loss, _ = model.step(sess, encoder_inputs, encoder_topics, decoder_inputs_dict,
                                          target_weights_dict, bucket_id, forward_only=False)
 
             step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
@@ -55,6 +55,9 @@ def train():
             for k, k_loss in step_loss.items():
                 bucket_loss[k] += k_loss / FLAGS.steps_per_checkpoint
             current_step += 1
+
+            if current_step % 100 == 0:
+                print("Training on step %d ......." % current_step)
 
             if current_step % (FLAGS.steps_per_checkpoint) == 0 or model.global_step.eval() == (epoch_steps * total_epoch):
                 perplexity = {k: math.exp(k_loss) if k_loss < 300 else float('inf') for k,k_loss in bucket_loss.items()}
@@ -83,8 +86,8 @@ def train():
                 bucket_loss = {k:0.0 for k in EMOTION_TYPE.keys()}
 
                 for bucket_id in range(len(BUCKETS)):
-                    encoder_inputs, decoder_inputs_dict, target_weights_dict = model.get_batch(dev_set, bucket_id)
-                    _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs_dict, target_weights_dict, bucket_id, True)
+                    encoder_inputs, encoder_topics, decoder_inputs_dict, target_weights_dict = model.get_batch(dev_set, bucket_id)
+                    _, eval_loss, _ = model.step(sess, encoder_inputs, encoder_topics, decoder_inputs_dict, target_weights_dict, bucket_id, True)
 
                     print("  eval: bucket %d" % (bucket_id))
                     for j in range(len(EMOTION_TYPE)):

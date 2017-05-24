@@ -26,6 +26,7 @@ tf.app.flags.DEFINE_boolean('use_beam_search', True, 'use beam search while gene
 
 FLAGS = tf.app.flags.FLAGS
 
-BUCKETS = [(5,10), (10, 15), (20, 25), (40, 50)]
+BUCKETS = [(10, 15), (20, 25), (40, 50)]
+#BUCKETS = [(10, 15)]
 
 EMOTION_TYPE = {0: "Other", 1: "Like", 2:"Sadness", 3:"Disgust", 4:"Anger", 5:"Happiness"}
