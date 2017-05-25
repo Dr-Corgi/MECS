@@ -220,7 +220,7 @@ class One2ManyModel(object):
                         loss = 0
                         for i in range(1,step_len):
                             batch_d = tf.subtract(da_state[i], da_state[i-1])
-                            loss += 0.0001 * tf.reduce_sum(tf.pow(100.0, batch_d))
+                            loss += 0.0001 * tf.reduce_sum(tf.pow(2.0, batch_d))
                             #sent_d = tf.unstack(batch_d, num=self.batch_size)
                             #for _d in sent_d:
                             #    loss += tf.reduce_mean(_d)
@@ -369,6 +369,7 @@ class One2ManyModel(object):
                 input_feed = {}
                 input_feed[self.model_attention_states[bucket_id].name] = outputs[0]
                 input_feed[self.model_encoder_states[bucket_id].name] = outputs[1]
+                input_feed[self.da_initial_state.name] = encoder_topics
                 step = 0
                 run_flag = True
 

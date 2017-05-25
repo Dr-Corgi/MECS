@@ -8,6 +8,18 @@ from tf_chatbot.lib import data_utils
 #from tf_chatbot.lib.seq2seq_model_utils import create_model, get_predicted_sentence
 from tf_chatbot.lib.one2many_model_utils import create_model, get_predicted_sentence
 import json
+import gensim
+
+def _load_gensim_model():
+    dictionary_path = "./tf_chatbot/data/one2many_da/gensim_model/dictionary.model"
+    lsi_path = "./tf_chatbot/data/one2many_da/gensim_model/LSI_model.model"
+    Tfidf_path = "./tf_chatbot/data/one2many_da/gensim_model/Tfidf_model.model"
+
+    dictionary = gensim.corpora.Dictionary.load(dictionary_path)
+    Tf_idf = gensim.models.TfidfModel.load(Tfidf_path)
+    lsi = gensim.models.LsiModel.load(lsi_path)
+
+    return dictionary, Tf_idf, lsi
 
 def predict():
     def _get_test_dataset():
@@ -17,6 +29,8 @@ def predict():
 
     results_filename = '_'.join(['results', str(FLAGS.num_layers), str(FLAGS.size), str(FLAGS.vocab_size)])
     results_path = os.path.join(FLAGS.results_dir, results_filename)
+
+    dictionary, Tf_idf, lsi = _load_gensim_model()
 
     with tf.Session() as sess, open(results_path, 'w') as results_fh:
 
@@ -33,7 +47,18 @@ def predict():
         test_dataset = _get_test_dataset()
 
         for sentence in test_dataset:
-            predicted_sentence = get_predicted_sentence(sentence, vocab, rev_vocab, model, sess, use_beam_search=FLAGS.use_beam_search)
+
+            sent_d2b = dictionary.doc2bow(sentence.strip().split(" "))
+            sent_lsi = lsi[sent_d2b]
+            sent_lsi.sort(key=lambda x: x[1], reverse=True)
+            sent_topics = [0] * 64
+            for sl in sent_lsi[:10]:
+                sent_topics[sl[0]] = 1
+
+            for i in range(len(sent_topics)):
+                sent_topics[i] = float(sent_topics[i])
+
+            predicted_sentence = get_predicted_sentence(sentence, sent_topics, vocab, rev_vocab, model, sess, use_beam_search=FLAGS.use_beam_search)
             print("".join(sentence.strip().split(" ")), '->')
             for i in range(6):
                 print(EMOTION_TYPE[i] + ": ")
@@ -48,3 +73,6 @@ def predict():
             results_fh.write("\n")
 
             #results_fh.write(predicted_sentence + '\n')
+
+if __name__ == '__main__':
+    dictionary, Tf_idf, lsi = _load_gensim_model()

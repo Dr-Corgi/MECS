@@ -43,18 +43,19 @@ def create_model(session, forward_only, beam_forward_only=False, use_sample=Fals
         session.run(tf.global_variables_initializer())
     return model
 
-def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_beam_search=False):
+def get_predicted_sentence(input_sentence, input_sentence_topics, vocab, rev_vocab, model, sess, use_beam_search=False):
     input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
 
     bucket_id = min([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
     #bucket_id = np.random.choice([b for b in range(len(BUCKETS)) if BUCKETS[b][0] > len(input_token_ids)])
     outputs = {0:[],1:[],2:[],3:[],4:[],5:[]}
 
-    feed_data = {bucket_id: [(input_token_ids, outputs)]}
-    encoder_inputs, decoder_inputs, target_weights = model.get_batch(feed_data, bucket_id)
+    feed_data = {bucket_id: [(input_token_ids, input_sentence_topics, outputs)]}
+    encoder_inputs, encoder_topic, decoder_inputs, target_weights = model.get_batch(feed_data, bucket_id)
 
     if use_beam_search:
         new_encoder_inputs = []
+        new_encoder_topics = []
         new_decoder_inputs = data_utils.gen_dict_list(EMOTION_TYPE)
         new_target_weights = data_utils.gen_dict_list(EMOTION_TYPE)
         for _emo_key, _emo_arrays in decoder_inputs.items():
@@ -66,19 +67,23 @@ def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_be
             for _item in _array:
                 _en_input = np.array([_item] * FLAGS.beam_search_size, dtype=np.int32)
                 new_encoder_inputs.append(_en_input)
+        for _ in range(FLAGS.beam_search_size):
+            for _item in encoder_topic:
+                new_encoder_topics.append(_item)
+
         for _emo_key, _emo_arrays in target_weights.items():
             for _array in _emo_arrays:
                 for _item in _array:
                     _ta_input = np.array([_item] * FLAGS.beam_search_size, dtype=np.int32)
                     new_target_weights[_emo_key].append(_ta_input)
 
-        _, _, output_words = model.step(sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id, forward_only=True, use_beam_search=True)
+        _, _, output_words = model.step(sess, new_encoder_inputs, new_encoder_topics, new_decoder_inputs, new_target_weights, bucket_id, forward_only=True, use_beam_search=True)
         output_sentences = {}
         for j in range(6):
             output_sentences[j] = " ".join([rev_vocab[tok_id] for tok_id in output_words[j][0]])+"["+str(output_words[j][1])+"]"
 
     else:
-        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True, use_beam_search=False)
+        _, _, output_logits = model.step(sess, encoder_inputs, [encoder_topic], decoder_inputs, target_weights, bucket_id, forward_only=True, use_beam_search=False)
 
         output_sentences = {}
         for j in range(6):
