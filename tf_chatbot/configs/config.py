@@ -19,7 +19,7 @@ tf.app.flags.DEFINE_integer('num_layers', 1, 'Numbers of layers in the model')
 tf.app.flags.DEFINE_integer('beam_search_size', 8, 'Size of beam search op')
 
 tf.app.flags.DEFINE_integer('max_train_data_size', 0, 'Limit on the size of training data (0: no limit)')
-tf.app.flags.DEFINE_integer('steps_per_checkpoint', 1000, 'How many training steps to do per checkpoint')
+tf.app.flags.DEFINE_integer('steps_per_checkpoint', 2500, 'How many training steps to do per checkpoint')
 
 tf.app.flags.DEFINE_boolean('use_sample', False, 'use sample while generating')
 tf.app.flags.DEFINE_boolean('use_beam_search', True, 'use beam search while generating')
