@@ -220,7 +220,7 @@ class One2ManyModel(object):
                         loss = 0
                         for i in range(1,step_len):
                             batch_d = tf.subtract(da_state[i], da_state[i-1])
-                            loss += 0.0001 * tf.reduce_sum(tf.pow(2.0, batch_d))
+                            loss += tf.reduce_sum(0.0001 * tf.reduce_mean(tf.pow(100.0, batch_d), axis=0))
                             #sent_d = tf.unstack(batch_d, num=self.batch_size)
                             #for _d in sent_d:
                             #    loss += tf.reduce_mean(_d)
@@ -229,7 +229,7 @@ class One2ManyModel(object):
                         return loss
 
                     for emo_idx in range(len(EMOTION_TYPE)):
-                        loss_2 = tf.reduce_sum(bucket_da_states[emo_idx][-1])
+                        loss_2 = tf.reduce_sum(tf.reduce_mean(bucket_da_states[emo_idx][-1], axis=0))
                         #print(tf.shape(loss_2))
                         loss_3 = cal_da_step_loss(bucket_da_states[emo_idx], data_utils.BUCKETS[bucket_id][1])
                         seq_loss = sequence_loss(self.outputs[emo_idx][-1],
@@ -400,7 +400,7 @@ class One2ManyModel(object):
                                     np.random.choice(range(self.target_vocab_size), size=self.beam_search_size,
                                                      replace=False, p=numpy_softmax(_outputs[emo_idx][step - 1][_idx])))
                                 _tok_probs[emo_idx].append(
-                                    numpy_softmax(_outputs[emo_idx][step - 1][_idx][_tok_ids[emo_idx][_idx]]))
+                                    numpy_softmax(_outputs[emo_idx][step - 1][_idx])[_tok_ids[emo_idx][_idx]])
 
                         else:
                             for _idx in range(self.beam_search_size):
