@@ -292,24 +292,24 @@ class One2ManyModel(object):
                     _tok_ids = data_utils.gen_dict_list(EMOTION_TYPE)
 
                     for emo_idx in EMOTION_TYPE.keys():
-                        if step == 1:
+                        if np.random.rand(1) < 0.4:
                             for _idx in range(self.beam_search_size):
                                 _tok_ids[emo_idx].append(np.random.choice(range(self.target_vocab_size), size=self.beam_search_size, replace=False, p=numpy_softmax(_outputs[emo_idx][step-1][_idx])))
-                                _tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step-1][_idx][_tok_ids[emo_idx][_idx]]))
+                                _tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step-1][_idx])[_tok_ids[emo_idx][_idx]])
 
                         else:
                             for _idx in range(self.beam_search_size):
-                                _tok_ids[emo_idx].append(
-                                    np.random.choice(range(self.target_vocab_size), size=self.beam_search_size,
-                                                     replace=False, p=numpy_softmax(_outputs[emo_idx][step - 1][_idx])))
-                                _tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step - 1][_idx][_tok_ids[emo_idx][_idx]]))
+                                #_tok_ids[emo_idx].append(
+                                #    np.random.choice(range(self.target_vocab_size), size=self.beam_search_size,
+                                #                     replace=False, p=numpy_softmax(_outputs[emo_idx][step - 1][_idx])))
+                                #_tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step - 1][_idx])[_tok_ids[emo_idx][_idx]])
 
                                 #_tok_prob, _tok_id = tf.nn.top_k(tf.nn.softmax(_outputs[emo_idx][step-1][_idx]), self.beam_search_size)
                                 #_tok_probs[emo_idx].append(_tok_prob.eval())
                                 #_tok_ids[emo_idx].append(_tok_id.eval())
 
-                                #_tok_ids[emo_idx].append(np.argsort(_outputs[emo_idx][step-1][_idx])[-self.beam_search_size:][::-1])
-                                #_tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step-1][_idx][_tok_ids[emo_idx][_idx]]))
+                                _tok_ids[emo_idx].append(np.argsort(_outputs[emo_idx][step-1][_idx])[-self.beam_search_size:][::-1])
+                                _tok_probs[emo_idx].append(numpy_softmax(_outputs[emo_idx][step-1][_idx])[_tok_ids[emo_idx][_idx]])
 
                     new_beams = data_utils.gen_dict_list(EMOTION_TYPE)
 
@@ -317,10 +317,10 @@ class One2ManyModel(object):
                         for beam_idx in range(self.beam_search_size):
                             for _idx in range(self.beam_search_size):
                                 #score = -(_tok_probs[emo_idx][beam_idx][_idx]) if _tok_ids[emo_idx][beam_idx][_idx] is data_utils.UNK_ID else _tok_probs[emo_idx][beam_idx][_idx]
-                                if _tok_ids[emo_idx][beam_idx][_idx] == data_utils.UNK_ID:
-                                    continue
-                                #print(" idx:", _idx)
                                 score = _tok_probs[emo_idx][beam_idx][_idx]
+                                if _tok_ids[emo_idx][beam_idx][_idx] == data_utils.UNK_ID:
+                                    score = - score
+                                #print(" idx:", _idx)
                                 new_beams[emo_idx].append(
                                     (beams[emo_idx][beam_idx][0] + score,
                                      beams[emo_idx][beam_idx][1] + [_tok_ids[emo_idx][beam_idx][_idx]],

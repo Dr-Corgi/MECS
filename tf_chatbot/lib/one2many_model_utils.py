@@ -73,7 +73,7 @@ def get_predicted_sentence(input_sentence, vocab, rev_vocab, model, sess, use_be
         _, _, output_words = model.step(sess, new_encoder_inputs, new_decoder_inputs, new_target_weights, bucket_id, forward_only=True, use_beam_search=True)
         output_sentences = {}
         for j in range(6):
-            output_sentences[j] = " ".join([rev_vocab[tok_id] for tok_id in output_words[j][0]])+"["+str(output_words[j][1])+"]"
+            output_sentences[j] = " ".join([rev_vocab[tok_id] for tok_id in output_words[j][0]])
 
     else:
         _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True, use_beam_search=False)
