@@ -427,6 +427,8 @@ class One2ManyModel(object):
                                     continue
                                 # print(" idx:", _idx)
                                 score = _tok_probs[emo_idx][beam_idx][_idx]
+                                if _tok_ids[emo_idx][beam_idx][_idx] == beams[emo_idx][beam_idx][1][-1]:
+                                    score = - score
                                 new_beams[emo_idx].append(
                                     (beams[emo_idx][beam_idx][0] + score,
                                      beams[emo_idx][beam_idx][1] + [_tok_ids[emo_idx][beam_idx][_idx]],

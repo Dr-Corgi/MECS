@@ -23,16 +23,15 @@ def _load_gensim_model():
 
 def predict():
     def _get_test_dataset():
-        data = json.load(open(TEST_DATASET_PATH))
-        test_sentences = [q for ((q, qe), _) in data]
+        test_sentences = []
+        with open("./tf_chatbot/data/test/ecm_test_data.txt", encoding='utf8') as fin:
+            for line in fin:
+                test_sentences.append(line.strip())
         return test_sentences
-
-    results_filename = '_'.join(['results', str(FLAGS.num_layers), str(FLAGS.size), str(FLAGS.vocab_size)])
-    results_path = os.path.join(FLAGS.results_dir, results_filename)
-
     dictionary, Tf_idf, lsi = _load_gensim_model()
 
-    with tf.Session() as sess, open(results_path, 'w') as results_fh:
+    output_data = []
+    with tf.Session() as sess:
 
         #model = create_model(sess, forward_only=True, use_sample=FLAGS.use_sample)
         if FLAGS.use_beam_search:
@@ -63,13 +62,16 @@ def predict():
             for i in range(6):
                 print(EMOTION_TYPE[i] + ": ")
                 print("".join(predicted_sentence[i].split(" ")))
+                output_data.append({"post": sentence, "emo":i, "res": predicted_sentence[i]})
 
-            results_fh.write("".join(sentence.strip().split(" ")) + "\n")
-            for i in range(6):
-                results_fh.write(EMOTION_TYPE[i])
-                results_fh.write(" -> ")
-                results_fh.write("".join(predicted_sentence[i].split(" ")))
-                results_fh.write("\n")
-            results_fh.write("\n")
+    json.dump(output_data, open("SMIPG_1_EGG.txt", 'w', encoding='utf8'))
 
             #results_fh.write(predicted_sentence + '\n')
+
+if __name__ == '__main__':
+    test_sentences = []
+    with open("../data/test/ecm_test_data.txt", encoding='utf8') as fin:
+        for line in fin:
+            test_sentences.append(line.strip())
+    for sent in test_sentences[:10]:
+        print(sent)

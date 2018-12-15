@@ -1,6 +1,5 @@
 import tensorflow as tf
-
-from tf_chatbot.lib.predict import predict, predict
+from tf_chatbot.lib.predict import predict
 
 def main(_):
     predict()
